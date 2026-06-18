@@ -522,5 +522,3 @@ if __name__ == "__main__":
               f"{m['display']:>14} [{m['status']}]{est}")
         if m["source_note"]:
             print(f"    ↳ {m['source_note']}")
-PYEOF
-echo "scorer done"

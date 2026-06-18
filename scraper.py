@@ -599,5 +599,3 @@ if __name__ == "__main__":
     import sys
     sym = sys.argv[1] if len(sys.argv) > 1 else "OGDC"
     print(json.dumps(scrape_company(sym), ensure_ascii=False, indent=2, default=str))
-PYEOF
-echo "scraper done"
