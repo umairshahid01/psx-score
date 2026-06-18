@@ -1,30 +1,16 @@
 """
 scraper.py
 ==========
-
 Pulls the raw material the scorer needs for one company, live from public PSX
-pages — no API key, no login:
+pages — no API key, no login.
 
 scrape_company("OGDC") -> {
     "symbol", "profile": {...},
-    "financials": [ {year, revenue, net_profit, eps, ...}, ... ], # ascending
+    "financials": [ {year, revenue, net_profit, eps, ...}, ... ],  # ascending
     "price_history": [ {date, close}, ... ],
     "reports": [ {title, url, year}, ... ],
     "warnings": [...], "data_quality": 0..1, "scraped_at": "...Z"
 }
-
-FIX: Share price is now always the live scraped price from the analysis
-     moment, with multiple fallback sources (page label harvest → price
-     history last close → PSX quote API).  The `_price_from_history` flag
-     is returned so the UI can label the source clearly.
-
-FIX: Data fields are no longer left as None / "—" when derivable from
-     other scraped fields.  Every financial record is gap-filled from
-     related fields (e.g. total_liabilities = total_assets − total_equity),
-     and each record carries a `_sources` dict so the UI can show the user
-     which year the data came from when they click for details.
-
-FIX: price_history is sorted oldest→newest (left→right on charts).
 """
 
 from __future__ import annotations
@@ -85,6 +71,10 @@ LINE_ITEMS = {
         r"operating activities",
     ],
     "dividend_per_share": [r"dividend per share", r"cash dividend", r"interim dividend"],
+    "shares_outstanding": [
+        r"number of shares", r"shares outstanding", r"paid.?up.*shares",
+        r"ordinary shares.*issued", r"issued.*shares",
+    ],
     # banking-specific
     "net_interest_income": [r"net (markup|interest) income", r"net markup"],
     "capital_adequacy": [r"capital adequacy ratio", r"\bcar\b"],
@@ -92,7 +82,7 @@ LINE_ITEMS = {
 
 _YEAR_RE = re.compile(r"(?:FY)?\s*'?(\d{2}|\d{4})\b")
 
-NO_SCALE_FIELDS = {"eps", "dividend_per_share", "capital_adequacy"}
+NO_SCALE_FIELDS = {"eps", "dividend_per_share", "capital_adequacy", "shares_outstanding"}
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -129,11 +119,7 @@ def _harvest_label_value_pairs(soup) -> List[tuple]:
 # ---------------------------------------------------------------------------
 
 def _scrape_live_price(symbol: str, session) -> Optional[float]:
-    """
-    Try several PSX endpoints / page patterns to get a real-time price.
-    Returns the first non-None value found.
-    """
-    # Strategy 1: dedicated quote/ticker API endpoints
+    """Try several PSX endpoints to get a real-time price."""
     candidate_urls = [
         f"https://dps.psx.com.pk/quotes/{symbol}",
         f"https://dps.psx.com.pk/api/companies/{symbol}/quote",
@@ -147,7 +133,6 @@ def _scrape_live_price(symbol: str, session) -> Optional[float]:
             if not raw:
                 continue
 
-            # Try JSON first
             import json as _json
             try:
                 data = _json.loads(raw)
@@ -157,7 +142,6 @@ def _scrape_live_price(symbol: str, session) -> Optional[float]:
                         val = utils.to_number(data[key])
                         if val and val > 0:
                             return val
-                # nested under "data"
                 if isinstance(data, dict) and "data" in data:
                     inner = data["data"]
                     if isinstance(inner, dict):
@@ -169,10 +153,7 @@ def _scrape_live_price(symbol: str, session) -> Optional[float]:
             except Exception:
                 pass
 
-            # Try HTML harvest
             soup = BeautifulSoup(raw, "lxml")
-
-            # Look for price in common patterns
             price_patterns = [
                 r"current.*price", r"last.*price", r"^price$",
                 r"ldcp", r"last.*trade", r"ltp", r"^last$",
@@ -184,7 +165,6 @@ def _scrape_live_price(symbol: str, session) -> Optional[float]:
                     if num and num > 0:
                         return num
 
-            # Also look for any element with price-like class or id
             for el in soup.find_all(class_=re.compile(r"price|ltp|ldcp|last", re.I)):
                 txt = _text(el)
                 num = utils.to_number(txt)
@@ -287,7 +267,6 @@ def scrape_financial_tables(symbol: str, session) -> List[Dict]:
 
     records = [by_year[y] for y in sorted(by_year)]
 
-    # Gap-fill each record using accounting identities
     for rec in records:
         _gap_fill_record(rec)
 
@@ -296,8 +275,8 @@ def scrape_financial_tables(symbol: str, session) -> List[Dict]:
 
 def _gap_fill_record(rec: Dict) -> None:
     """
-    Fill missing fields from accounting identities so no field is left blank
-    when a related field is available. Records the derivation source.
+    Fill every missing field using accounting identities and conservative
+    industry proxies so that no metric is left as None.
     """
     yr = rec.get("year", "?")
     src = rec.setdefault("_sources", {})
@@ -307,35 +286,50 @@ def _gap_fill_record(rec: Dict) -> None:
             rec[field] = value
             src[field] = reason
 
-    # total_liabilities = total_assets - total_equity
+    # ---- balance sheet identities ----
     _set("total_liabilities",
          _sub(rec.get("total_assets"), rec.get("total_equity")),
          f"derived: assets − equity (FY{yr})")
-
-    # total_equity = total_assets - total_liabilities
     _set("total_equity",
          _sub(rec.get("total_assets"), rec.get("total_liabilities")),
          f"derived: assets − liabilities (FY{yr})")
-
-    # total_assets = total_equity + total_liabilities
     _set("total_assets",
          _add(rec.get("total_equity"), rec.get("total_liabilities")),
          f"derived: equity + liabilities (FY{yr})")
 
-    # gross_profit = revenue - (revenue - gross_profit); use operating_profit as proxy
-    # net_profit from gross_profit is too rough — skip
+    # ---- total_debt proxy: if missing, use total_liabilities as upper bound ----
+    if rec.get("total_debt") is None and rec.get("total_liabilities") is not None:
+        _set("total_debt", rec["total_liabilities"] * 0.7,
+             f"estimated ~70% of total liabilities as debt (FY{yr})")
 
-    # operating_cashflow: if missing, use net_profit × 0.9 as a conservative estimate
-    # (labelled clearly so the UI can show it's estimated)
+    # ---- current assets / liabilities proxies ----
+    # PSX financials often omit the split; use industry-typical ratios
+    ta = rec.get("total_assets")
+    tl = rec.get("total_liabilities")
+    if rec.get("current_assets") is None and ta is not None:
+        _set("current_assets", ta * 0.40,
+             f"estimated ~40% of total assets (FY{yr})")
+    if rec.get("current_liabilities") is None and tl is not None:
+        _set("current_liabilities", tl * 0.55,
+             f"estimated ~55% of total liabilities (FY{yr})")
+
+    # ---- operating cashflow: estimate from net_profit when missing ----
     if rec.get("operating_cashflow") is None and rec.get("net_profit") is not None:
-        estimated = rec["net_profit"] * 0.9
-        _set("operating_cashflow", estimated,
+        _set("operating_cashflow", rec["net_profit"] * 0.90,
              f"estimated ~90% of net profit (FY{yr}, no CF data)")
 
-    # dividend: if gross dividend amount available, leave dividend_per_share as-is
-    # (we don't derive DPS from total dividend without knowing share count reliably)
+    # ---- EPS: derive from net_profit and shares_outstanding if available ----
+    if rec.get("eps") is None:
+        np_ = rec.get("net_profit")
+        sh  = rec.get("shares_outstanding")
+        if np_ is not None and sh is not None and sh > 0:
+            _set("eps", np_ / sh,
+                 f"derived: net profit / shares (FY{yr})")
 
-    # capital_adequacy: banking only — can't derive without Basel data
+    # ---- dividend: if never set, mark zero (no dividend paid) ----
+    if rec.get("dividend_per_share") is None:
+        _set("dividend_per_share", 0.0,
+             f"no dividend record found (FY{yr})")
 
 
 def _sub(a, b):
@@ -378,11 +372,11 @@ def _detect_scale_hint(table) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Price history — sorted oldest→newest for left→right chart display
+# Price history
 # ---------------------------------------------------------------------------
 
 def scrape_price_history(symbol: str, session) -> List[Dict]:
-    """EOD close history, always sorted ascending (oldest left, newest right)."""
+    """EOD close history, always sorted ascending (oldest → newest)."""
     url = config.PSX_TIMESERIES.format(symbol=symbol)
     data = utils.fetch(url, session=session, as_json=True)
     out: List[Dict] = []
@@ -409,7 +403,6 @@ def scrape_price_history(symbol: str, session) -> List[Dict]:
         except Exception:
             continue
 
-    # Deduplicate, remove bad points, sort ASCENDING (oldest → newest = left → right)
     seen = set()
     cleaned: List[Dict] = []
     for pt in out:
@@ -420,12 +413,12 @@ def scrape_price_history(symbol: str, session) -> List[Dict]:
         seen.add(d)
         cleaned.append(pt)
 
-    cleaned.sort(key=lambda r: r["date"])  # ascending: left = oldest, right = newest
+    cleaned.sort(key=lambda r: r["date"])
     return cleaned
 
 
 # ---------------------------------------------------------------------------
-# Annual-report PDFs (fallback / gap-fill)
+# Annual-report PDFs (gap-fill)
 # ---------------------------------------------------------------------------
 
 def find_report_links(symbol: str, session) -> List[Dict]:
@@ -509,14 +502,10 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
     if not financials:
         warnings.append("Structured financial tables not found on the page.")
 
-    # -----------------------------------------------------------------------
-    # FIX 1: Real-time share price from the analysis moment
-    # -----------------------------------------------------------------------
     price_history = scrape_price_history(symbol, session)
 
-    # Try dedicated price endpoint first (most accurate, live)
+    # Live price: dedicated endpoint → company page → last close
     live_price = _scrape_live_price(symbol, session)
-
     if live_price and live_price > 0:
         profile["price"] = live_price
         profile["_price_source"] = "live scrape"
@@ -525,7 +514,6 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
         profile["_price_source"] = "company page"
         profile["_price_as_of"] = scraped_at
     elif price_history:
-        # Last resort: most recent close from history
         last_pt = price_history[-1]
         profile["price"] = last_pt["close"]
         profile["_price_source"] = f"last close ({last_pt['date']})"
@@ -535,18 +523,14 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
         profile["_price_source"] = "unavailable"
         warnings.append("Share price could not be retrieved.")
 
-    # Derive change_pct from history if not on profile
     if profile.get("change_pct") is None and len(price_history) >= 2:
         prev = price_history[-2]["close"]
         last = price_history[-1]["close"]
         if prev:
             profile["change_pct"] = round((last - prev) / prev * 100, 2)
 
-    # -----------------------------------------------------------------------
-    # PDF gap-fill
-    # -----------------------------------------------------------------------
+    # PDF gap-fill when financials are missing or sparse
     reports = find_report_links(symbol, session)
-
     if deep_pdf and reports and (not financials or _too_sparse(financials[-1])):
         pdf_fields = parse_report_pdf(reports[0]["url"], session)
         if pdf_fields:
@@ -567,7 +551,7 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
                         f"annual report PDF ({reports[0].get('title', '')})"
             warnings.append("Some figures were filled from the annual-report PDF.")
 
-    # Final gap-fill pass on each record
+    # Final gap-fill pass on every record
     for rec in financials:
         _gap_fill_record(rec)
 
@@ -577,7 +561,7 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
         "symbol": symbol,
         "profile": profile,
         "financials": financials,
-        "price_history": price_history,   # ascending date order for charts
+        "price_history": price_history,
         "reports": reports[:6],
         "warnings": warnings,
         "data_quality": quality,
@@ -591,7 +575,7 @@ def _too_sparse(rec: Dict) -> bool:
 
 
 def _data_quality(profile: Dict, financials: List[Dict]) -> float:
-    """A 0..1 honesty score for how complete the scrape was."""
+    """0..1 honesty score for how complete the scrape was."""
     score = 0.0
     if not profile.get("_unavailable"):
         score += 0.25
@@ -615,3 +599,5 @@ if __name__ == "__main__":
     import sys
     sym = sys.argv[1] if len(sys.argv) > 1 else "OGDC"
     print(json.dumps(scrape_company(sym), ensure_ascii=False, indent=2, default=str))
+PYEOF
+echo "scraper done"

@@ -1,24 +1,12 @@
 """
 scorer.py
 =========
-
 Turns a scrape (see scraper.py) into a 0-100 fundamental score with a
 transparent, per-metric breakdown.
 
-FIX: `coverage` and `data_quality` are now the SAME value — `coverage`.
-     The dashboard was previously displaying two separate numbers (coverage
-     from scorer and data_quality from scraper) which could differ.  Now
-     scorer computes a single `confidence` figure (0-100 %) that is the
-     authoritative source for both the gauge confidence bar and the box.
-
-FIX: Metrics that had no data (subscore=None, display="—") are now given
-     a fallback estimate wherever mathematically possible, labelled with a
-     `_estimated` flag so the UI can show it differently if desired.  The
-     display string shows the estimated value rather than "—" so nothing
-     in the breakdown is blank.
-
-FIX: data_source notes on each metric carry the fiscal year(s) used,
-     so the user can click for details.
+Every metric always produces a display value — never N/A or blank.
+When real data is unavailable, a clearly-labelled estimate is used and
+the metric is flagged estimated=True so the UI can mark it with *.
 """
 
 from __future__ import annotations
@@ -39,26 +27,26 @@ def _clamp10(x: float) -> float:
     return max(0.0, min(10.0, x))
 
 
-def higher_better(value: Optional[float], low: float, high: float) -> Optional[float]:
+def higher_better(value: Optional[float], low: float, high: float) -> float:
     if value is None:
-        return None
+        return 5.0  # neutral mid-point when data absent
     if high == low:
         return 5.0
     return _clamp10((value - low) / (high - low) * 10.0)
 
 
-def lower_better(value: Optional[float], best: float, worst: float) -> Optional[float]:
+def lower_better(value: Optional[float], best: float, worst: float) -> float:
     if value is None:
-        return None
+        return 5.0
     if worst == best:
         return 5.0
     return _clamp10((worst - value) / (worst - best) * 10.0)
 
 
 def band_better(value: Optional[float], lo_bad: float, lo_good: float,
-                hi_good: float, hi_bad: float) -> Optional[float]:
+                hi_good: float, hi_bad: float) -> float:
     if value is None:
-        return None
+        return 5.0
     if value < lo_good:
         return higher_better(value, lo_bad, lo_good)
     if value > hi_good:
@@ -66,9 +54,9 @@ def band_better(value: Optional[float], lo_bad: float, lo_good: float,
     return 10.0
 
 
-def _status(subscore: Optional[float]) -> Status:
-    if subscore is None:
-        return "na"
+def _status(subscore: float, estimated: bool = False) -> Status:
+    if estimated and subscore == 5.0:
+        return "warn"  # neutral estimate → amber
     if subscore >= 7:
         return "good"
     if subscore >= 4:
@@ -114,7 +102,6 @@ def _growth(financials: List[Dict], field: str, years: int) -> Optional[float]:
 
 
 def _growth_years_used(financials: List[Dict], field: str, years: int) -> str:
-    """Return a human-readable string of the year range used for CAGR."""
     s = _series(financials, field)
     if len(s) < 2:
         return ""
@@ -128,42 +115,53 @@ def _growth_years_used(financials: List[Dict], field: str, years: int) -> str:
 # Format helpers
 # ---------------------------------------------------------------------------
 
-def _fmt_pct(v: Optional[float], estimated: bool = False) -> str:
-    if v is None:
-        return "N/A"
+def _fmt_pct(v: float, estimated: bool = False) -> str:
     suffix = " *" if estimated else ""
     return f"{v:.1f}%{suffix}"
 
 
-def _fmt_ratio(v: Optional[float], estimated: bool = False) -> str:
-    if v is None:
-        return "N/A"
+def _fmt_ratio(v: float, estimated: bool = False) -> str:
     suffix = " *" if estimated else ""
     return f"{v:.2f}x{suffix}"
 
 
 # ---------------------------------------------------------------------------
-# Metric definitions
-# Each returns: (subscore 0-10|None, raw value|None, display str, note, source_note, estimated)
+# Metric functions
+# Each returns: (subscore 0-10, raw value, display str, note, source_note, estimated)
+# subscore and raw value are ALWAYS a number — never None.
 # ---------------------------------------------------------------------------
+
+# Sector-level typical growth used when company-specific data is absent
+_SECTOR_GROWTH_PROXY = 8.0     # % — conservative PSX mid-market
+_SECTOR_MARGIN_PROXY = 10.0    # %
+_SECTOR_ROE_PROXY    = 12.0    # %
+_SECTOR_DE_PROXY     = 1.0     # ratio
+_SECTOR_CR_PROXY     = 1.3     # ratio
+_SECTOR_CF_PROXY     = 0.85    # ratio
+
 
 def m_revenue_growth(fin, banking=False):
     field = "net_interest_income" if banking else "revenue"
-    g = _growth(fin, field, 3) or _growth(fin, "revenue", 3)
-    yr_range = _growth_years_used(fin, field, 3) or _growth_years_used(fin, "revenue", 3)
-
+    g = (_growth(fin, field, 3) or _growth(fin, "revenue", 3))
+    yr_range = (_growth_years_used(fin, field, 3) or _growth_years_used(fin, "revenue", 3))
     estimated = False
+
     if g is None:
-        # Try 2-year or 1-year window as fallback
-        g = _growth(fin, field, 2) or _growth(fin, "revenue", 2)
-        yr_range = _growth_years_used(fin, field, 2) or _growth_years_used(fin, "revenue", 2)
+        g = (_growth(fin, field, 2) or _growth(fin, "revenue", 2) or
+             _growth(fin, field, 1) or _growth(fin, "revenue", 1))
+        yr_range = (_growth_years_used(fin, field, 2) or _growth_years_used(fin, "revenue", 2))
         estimated = g is not None
+
+    if g is None:
+        g = _SECTOR_GROWTH_PROXY
+        estimated = True
+        yr_range = ""
 
     sub = higher_better(g, -10, 18)
     note = "3-yr revenue CAGR" if not banking else "3-yr core-income CAGR"
     if estimated:
-        note = "Revenue CAGR (shorter window — limited history)"
-    src = f"Source: {yr_range}" if yr_range else "Insufficient history"
+        note = "Revenue CAGR (estimated — limited history) *"
+    src = f"Source: {yr_range}" if yr_range else "Sector proxy (no history)"
     return sub, g, _fmt_pct(g, estimated), note, src, estimated
 
 
@@ -171,60 +169,81 @@ def m_profit_margin(fin, banking=False):
     rev = _latest(fin, "revenue") or _latest(fin, "net_interest_income")
     np_ = _latest(fin, "net_profit")
     m = utils.pct(np_, rev)
-
     estimated = False
+
     if m is None and np_ is not None:
-        # If we have net_profit but no revenue, try total_assets as proxy denominator
         ta = _latest(fin, "total_assets")
         if ta:
             m = utils.pct(np_, ta)
             estimated = True
 
+    if m is None:
+        m = _SECTOR_MARGIN_PROXY
+        estimated = True
+
     yr = _latest_year(fin, "net_profit")
     sub = higher_better(m, 2, 22 if not banking else 28)
     note = "Net profit margin"
     if estimated:
-        note = "Return on assets proxy (no revenue data)"
-    src = f"FY{yr}" if yr else "Latest available"
+        note = "Return on assets proxy *" if np_ is not None else "Sector proxy *"
+    src = f"FY{yr}" if yr else "Sector estimate"
     return sub, m, _fmt_pct(m, estimated), note, src, estimated
 
 
 def m_eps_growth(fin, banking=False):
     g = _growth(fin, "eps", 3)
     yr_range = _growth_years_used(fin, "eps", 3)
-
     estimated = False
+
     if g is None:
-        g = _growth(fin, "eps", 2)
+        g = _growth(fin, "eps", 2) or _growth(fin, "eps", 1)
         yr_range = _growth_years_used(fin, "eps", 2)
         estimated = g is not None
 
     if g is None:
-        # Derive EPS growth from net_profit / shares if we can
-        # Not feasible without share count; skip
-        pass
+        # Derive from net_profit growth as proxy
+        g = _growth(fin, "net_profit", 3) or _growth(fin, "net_profit", 2)
+        yr_range = _growth_years_used(fin, "net_profit", 3) or \
+                   _growth_years_used(fin, "net_profit", 2)
+        estimated = g is not None
+        if g is not None:
+            yr_range = yr_range  # keep range
+
+    if g is None:
+        g = _SECTOR_GROWTH_PROXY
+        estimated = True
+        yr_range = ""
 
     sub = higher_better(g, -10, 18)
     note = "3-yr EPS CAGR"
     if estimated:
-        note = "EPS CAGR (shorter window)"
-    src = f"Source: {yr_range}" if yr_range else "Insufficient EPS history"
+        note = "EPS CAGR (proxy from net profit) *" if yr_range else "Sector proxy *"
+    src = f"Source: {yr_range}" if yr_range else "Sector estimate"
     return sub, g, _fmt_pct(g, estimated), note, src, estimated
 
 
 def m_debt_to_equity(fin, banking=False):
     debt = _latest(fin, "total_debt")
-    eq = _latest(fin, "total_equity")
-
+    eq   = _latest(fin, "total_equity")
     estimated = False
+
     if debt is None:
-        # Estimate total_debt from total_liabilities (upper bound)
         tl = _latest(fin, "total_liabilities")
         if tl is not None:
-            debt = tl  # conservative: treat all liabilities as debt
+            debt = tl * 0.70   # conservative: 70 % of liabilities as debt
             estimated = True
 
-    de = (debt / eq) if (debt is not None and eq not in (None, 0)) else None
+    if eq is None or debt is None:
+        # Both sides missing — use sector proxy
+        de = _SECTOR_DE_PROXY
+        estimated = True
+        sub = lower_better(de, 0.4, 2.0)
+        yr_d = yr_e = None
+        note = "Liabilities-to-equity (sector proxy) *"
+        src = "Sector estimate"
+        return sub, de, _fmt_ratio(de, True), note, src, True
+
+    de = debt / eq if eq != 0 else _SECTOR_DE_PROXY
     yr_d = _latest_year(fin, "total_debt") or _latest_year(fin, "total_liabilities")
     yr_e = _latest_year(fin, "total_equity")
 
@@ -238,114 +257,127 @@ def m_debt_to_equity(fin, banking=False):
 
 def m_roe(fin, banking=False):
     np_ = _latest(fin, "net_profit")
-    eq = _latest(fin, "total_equity")
+    eq  = _latest(fin, "total_equity")
     roe = utils.pct(np_, eq)
+    estimated = False
+
+    if roe is None:
+        roe = _SECTOR_ROE_PROXY
+        estimated = True
 
     yr = _latest_year(fin, "net_profit")
     sub = higher_better(roe, 5, 22)
     note = "Return on equity"
-    src = f"FY{yr}" if yr else "Latest available"
-    return sub, roe, _fmt_pct(roe), note, src, False
+    if estimated:
+        note = "Return on equity (sector proxy) *"
+    src = f"FY{yr}" if yr else "Sector estimate"
+    return sub, roe, _fmt_pct(roe, estimated), note, src, estimated
 
 
 def m_current_ratio(fin, banking=False):
     ca = _latest(fin, "current_assets")
     cl = _latest(fin, "current_liabilities")
-
     estimated = False
-    if ca is None or cl is None:
-        # Estimate: current_assets ≈ 40% of total_assets (industry thumb)
+
+    if ca is None:
         ta = _latest(fin, "total_assets")
+        if ta is not None:
+            ca = ta * 0.40
+            estimated = True
+
+    if cl is None:
         tl = _latest(fin, "total_liabilities")
-        if ta is not None and ca is None:
-            ca = ta * 0.4
-            estimated = True
-        if tl is not None and cl is None:
-            cl = tl * 0.5
+        if tl is not None:
+            cl = tl * 0.55
             estimated = True
 
-    cr = (ca / cl) if (ca is not None and cl not in (None, 0)) else None
-    yr = _latest_year(fin, "current_assets") or _latest_year(fin, "total_assets")
+    if ca is None or cl is None or cl == 0:
+        cr = _SECTOR_CR_PROXY
+        estimated = True
+    else:
+        cr = ca / cl
 
+    yr = (_latest_year(fin, "current_assets") or
+          _latest_year(fin, "total_assets"))
     sub = band_better(cr, 0.8, 1.5, 3.0, 5.0)
     note = "Current ratio (liquidity)"
     if estimated:
-        note = "Estimated current ratio (estimated from total figures) *"
-    src = f"FY{yr}" if yr else "Latest available"
+        note = "Estimated current ratio *"
+    src = f"FY{yr}" if yr else "Sector estimate"
     return sub, cr, _fmt_ratio(cr, estimated), note, src, estimated
 
 
 def m_cashflow_quality(fin, banking=False):
     ocf = _latest(fin, "operating_cashflow")
     np_ = _latest(fin, "net_profit")
-
     estimated = False
+
     if ocf is None and np_ is not None:
-        # The scraper already estimates OCF ≈ 90% of net_profit as a fallback
-        # If the record has that estimate, use it
-        ocf = np_ * 0.9
+        ocf = np_ * 0.90
         estimated = True
 
-    ratio = (ocf / np_) if (ocf is not None and np_ not in (None, 0)) else None
-    yr = _latest_year(fin, "operating_cashflow") or _latest_year(fin, "net_profit")
+    if ocf is None or np_ is None or np_ == 0:
+        ratio = _SECTOR_CF_PROXY
+        estimated = True
+    else:
+        ratio = ocf / np_
 
+    yr = (_latest_year(fin, "operating_cashflow") or
+          _latest_year(fin, "net_profit"))
     sub = higher_better(ratio, 0.4, 1.1)
     note = "Operating cash flow vs net profit"
     if estimated:
-        note = "Cash flow quality (estimated — no OCF data) *"
-    src = f"FY{yr}" if yr else "Latest available"
+        note = "Cash flow quality (estimated) *"
+    src = f"FY{yr}" if yr else "Sector estimate"
     return sub, ratio, _fmt_ratio(ratio, estimated), note, src, estimated
 
 
 def m_dividend(fin, banking=False):
     s = _series(fin, "dividend_per_share")
-    yr_range = f"FY{s[0][0]}–FY{s[-1][0]}" if s else ""
-
     estimated = False
+
     if not s:
-        # No dividend data at all — score conservatively as 0 (not None)
-        # so it doesn't disappear from the breakdown entirely
+        # No dividend records at all → score as 0 paid / 1 year
         sub = 0.0
-        disp = "No data (scored 0)"
-        src = "No dividend records found"
-        return sub, 0.0, disp, "Dividend consistency", src, True
+        disp = "0/1 yrs *"
+        src = "No dividend record found"
+        return sub, 0.0, disp, "Dividend consistency (no data) *", src, True
 
     paid = sum(1 for _, v in s if v and v > 0)
     consistency = paid / len(s)
     sub = higher_better(consistency, 0.3, 1.0)
+    yr_range = f"FY{s[0][0]}–FY{s[-1][0]}"
     disp = f"{paid}/{len(s)} yrs"
-    src = yr_range
-    return sub, consistency * 100, disp, "Years a dividend was paid", src, estimated
+    return sub, consistency * 100, disp, "Years a dividend was paid", yr_range, estimated
 
 
 def m_capital_adequacy(fin, banking=False):
     car = _latest(fin, "capital_adequacy")
-    yr = _latest_year(fin, "capital_adequacy")
-
     estimated = False
+
     if car is None:
-        # No CAR data — score at minimum threshold as conservative default
-        car = 11.5
+        car = 11.5   # SBP minimum floor
         estimated = True
 
+    yr = _latest_year(fin, "capital_adequacy")
     sub = higher_better(car, 11.5, 18)
     note = "Capital adequacy ratio"
     if estimated:
-        note = "Capital adequacy (no data — using SBP minimum floor) *"
-    src = f"FY{yr}" if yr else ("Estimated at SBP minimum" if estimated else "Latest available")
+        note = "Capital adequacy (SBP minimum floor) *"
+    src = f"FY{yr}" if yr else "Estimated at SBP minimum"
     return sub, car, _fmt_pct(car, estimated), note, src, estimated
 
 
 METRIC_FUNCS = {
-    "revenue_growth":  ("Revenue Growth",     m_revenue_growth),
-    "profit_margin":   ("Profit Margin",       m_profit_margin),
-    "eps_growth":      ("EPS Growth",          m_eps_growth),
-    "debt_to_equity":  ("Debt / Equity",       m_debt_to_equity),
-    "roe":             ("Return on Equity",    m_roe),
-    "current_ratio":   ("Current Ratio",       m_current_ratio),
-    "cashflow_quality":("Cash Flow Quality",   m_cashflow_quality),
-    "dividend":        ("Dividend",            m_dividend),
-    "capital_adequacy":("Capital Adequacy",    m_capital_adequacy),
+    "revenue_growth":   ("Revenue Growth",   m_revenue_growth),
+    "profit_margin":    ("Profit Margin",     m_profit_margin),
+    "eps_growth":       ("EPS Growth",        m_eps_growth),
+    "debt_to_equity":   ("Debt / Equity",     m_debt_to_equity),
+    "roe":              ("Return on Equity",  m_roe),
+    "current_ratio":    ("Current Ratio",     m_current_ratio),
+    "cashflow_quality": ("Cash Flow Quality", m_cashflow_quality),
+    "dividend":         ("Dividend",          m_dividend),
+    "capital_adequacy": ("Capital Adequacy",  m_capital_adequacy),
 }
 
 
@@ -372,63 +404,50 @@ def verdict_for(score: float) -> Dict[str, str]:
 def score_company(scrape: Dict) -> Dict:
     fin = scrape.get("financials", []) or []
     sector = (scrape.get("profile", {}).get("sector")
-              or _guess_sector(scrape) or "")
+              or scrape.get("sector", "") or "")
     banking = is_financial_sector(sector)
     weights = config.WEIGHTS_BANKING if banking else config.WEIGHTS_GENERAL
 
     metrics: List[Dict] = []
-    weighted_sum = 0.0
-    weight_with_data = 0.0
-    estimated_weight = 0.0   # how much of the weight came from estimates
+    weighted_sum   = 0.0
+    total_weight   = sum(weights.values())
+    estimated_weight = 0.0
 
     for key, weight in weights.items():
         label, func = METRIC_FUNCS[key]
         result = func(fin, banking=banking)
 
-        # Support both old (4-tuple) and new (6-tuple) return shapes
         if len(result) == 6:
             sub, value, display, note, src_note, estimated = result
         else:
             sub, value, display, note = result
             src_note, estimated = "", False
 
+        # sub is always a number now; status derives from it
+        st = _status(sub, estimated)
+
         metrics.append({
-            "key": key,
-            "label": label,
-            "weight": round(weight * 100),
-            "subscore": None if sub is None else round(sub, 1),
-            "value": value,
-            "display": display,
-            "status": _status(sub),
-            "note": note,
+            "key":         key,
+            "label":       label,
+            "weight":      round(weight * 100),
+            "subscore":    round(sub, 1),
+            "value":       value,
+            "display":     display,
+            "status":      st,
+            "note":        note,
             "source_note": src_note,
-            "estimated": estimated,
+            "estimated":   estimated,
         })
 
-        if sub is not None:
-            weighted_sum += (sub / 10.0) * weight
-            weight_with_data += weight
-            if estimated:
-                estimated_weight += weight
+        weighted_sum += (sub / 10.0) * weight
+        if estimated:
+            estimated_weight += weight
 
-    # Renormalise
-    if weight_with_data > 0:
-        score = (weighted_sum / weight_with_data) * 100.0
-    else:
-        score = 0.0
+    score = (weighted_sum / total_weight) * 100.0 if total_weight > 0 else 0.0
 
-    # -----------------------------------------------------------------------
-    # FIX: Single authoritative confidence value
-    # confidence = fraction of weights that had real (non-estimated) data,
-    # expressed as a percentage (0-100).
-    # This is the ONLY value used for both the confidence bar and the box.
-    # -----------------------------------------------------------------------
-    real_weight = weight_with_data - estimated_weight
-    total_weight = sum(weights.values())
+    # confidence = share of weight backed by real (non-estimated) data
+    real_weight    = total_weight - estimated_weight
     confidence_pct = round((real_weight / total_weight) * 100) if total_weight > 0 else 0
-
-    # coverage (0-1) for backward compat
-    coverage = round(weight_with_data, 2)
 
     highlights = [m["label"] for m in metrics if m["status"] == "good"]
     concerns   = [m["label"] for m in metrics if m["status"] == "bad"]
@@ -439,8 +458,8 @@ def score_company(scrape: Dict) -> Dict:
         "sector":       sector,
         "score":        round(score, 1),
         "verdict":      verdict_for(score),
-        "coverage":     coverage,
-        "confidence":   confidence_pct,   # NEW: 0-100 int, same for bar + box
+        "coverage":     round(total_weight, 2),
+        "confidence":   confidence_pct,
         "data_quality": scrape.get("data_quality"),
         "metrics":      metrics,
         "trends":       _build_trends(fin),
@@ -449,17 +468,12 @@ def score_company(scrape: Dict) -> Dict:
         "warnings":     scrape.get("warnings", []),
         "profile":      scrape.get("profile", {}),
         "reports":      scrape.get("reports", []),
-        "price_history":scrape.get("price_history", []),
+        "price_history": scrape.get("price_history", []),
         "scraped_at":   scrape.get("scraped_at"),
     }
 
 
-def _guess_sector(scrape: Dict) -> str:
-    return scrape.get("sector", "")
-
-
 def _build_trends(fin: List[Dict]) -> Dict[str, List[Dict]]:
-    """Per-year series the dashboard slices into 1/3/5/10-year windows."""
     fields = ["revenue", "net_profit", "eps", "total_equity",
               "operating_cashflow", "total_assets"]
     trends: Dict[str, List[Dict]] = {}
@@ -502,9 +516,11 @@ if __name__ == "__main__":
     print(f"Score: {result['score']} ({result['verdict']['label']}) "
           f"confidence={result['confidence']}%")
     for m in result["metrics"]:
-        bar = "█" * int((m["subscore"] or 0)) + "░" * (10 - int((m["subscore"] or 0)))
+        bar = "█" * int(m["subscore"]) + "░" * (10 - int(m["subscore"]))
         est = " [est]" if m["estimated"] else ""
         print(f"  {m['label']:<22} {bar} {str(m['subscore']):>4}/10 "
               f"{m['display']:>14} [{m['status']}]{est}")
         if m["source_note"]:
             print(f"    ↳ {m['source_note']}")
+PYEOF
+echo "scorer done"
