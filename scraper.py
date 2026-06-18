@@ -283,7 +283,18 @@ def scrape_price_history(symbol: str, session) -> List[Dict]:
                 })
         except Exception:  # noqa: BLE001
             continue
-    return out
+    # Clean: drop bad points, dedupe by date, sort ascending (oldest -> newest)
+    seen = set()
+    cleaned: List[Dict] = []
+    for pt in out:
+        d = pt.get("date")
+        c = pt.get("close")
+        if not d or c is None or c <= 0 or d in seen:
+            continue
+        seen.add(d)
+        cleaned.append(pt)
+    cleaned.sort(key=lambda r: r["date"])
+    return cleaned
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +389,18 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
     price_history = scrape_price_history(symbol, session)
     if not price_history:
         warnings.append("Price history endpoint returned nothing.")
+
+    # Fallback: if the live price wasn't found on the page, use the most recent
+    # close from the price history so the dashboard never shows a blank price.
+    if price_history:
+        if profile.get("price") is None:
+            profile["price"] = price_history[-1]["close"]
+            profile["_price_from_history"] = True
+        if profile.get("change_pct") is None and len(price_history) >= 2:
+            prev = price_history[-2]["close"]
+            last = price_history[-1]["close"]
+            if prev:
+                profile["change_pct"] = round((last - prev) / prev * 100, 2)
 
     reports = find_report_links(symbol, session)
 
