@@ -368,16 +368,47 @@ def m_capital_adequacy(fin, banking=False):
     return sub, car, _fmt_pct(car, estimated), note, src, estimated
 
 
+def m_price_trend(fin, banking=False, price_history=None):
+    """12-month share-price momentum.  Added in v2 scoring model."""
+    from datetime import date as _date
+    ph = price_history or []
+    estimated = False
+
+    if len(ph) < 2:
+        sub = 5.0
+        estimated = True
+        return sub, 0.0, "—", "12-month price momentum (no history)", "No price data", True
+
+    last = ph[-1]
+    try:
+        last_d = _date.fromisoformat(last["date"])
+        target = last_d.replace(year=last_d.year - 1)
+    except Exception:
+        sub = 5.0
+        return sub, 0.0, "—", "12-month price momentum", "Date parse error", True
+
+    ref = min(ph, key=lambda p: abs((_date.fromisoformat(p["date"]) - target).days))
+    r0, r1 = ref["close"], last["close"]
+    ret = ((r1 - r0) / r0 * 100) if r0 else 0.0
+    sub = higher_better(ret, -25, 45)
+    arrow = "▲" if ret >= 0 else "▼"
+    disp = f"{ret:+.1f}% {arrow}"
+    note = "12-month share-price momentum"
+    src = f"PSX EOD {ref['date']} → {last['date']}"
+    return sub, ret, disp, note, src, estimated
+
+
 METRIC_FUNCS = {
-    "revenue_growth":   ("Revenue Growth",   m_revenue_growth),
-    "profit_margin":    ("Profit Margin",     m_profit_margin),
-    "eps_growth":       ("EPS Growth",        m_eps_growth),
-    "debt_to_equity":   ("Debt / Equity",     m_debt_to_equity),
-    "roe":              ("Return on Equity",  m_roe),
-    "current_ratio":    ("Current Ratio",     m_current_ratio),
-    "cashflow_quality": ("Cash Flow Quality", m_cashflow_quality),
-    "dividend":         ("Dividend",          m_dividend),
-    "capital_adequacy": ("Capital Adequacy",  m_capital_adequacy),
+    "revenue_growth":   ("Revenue Growth",       m_revenue_growth),
+    "profit_margin":    ("Profit Margin",         m_profit_margin),
+    "eps_growth":       ("EPS Growth",            m_eps_growth),
+    "debt_to_equity":   ("Debt / Equity",         m_debt_to_equity),
+    "roe":              ("Return on Equity",      m_roe),
+    "current_ratio":    ("Current Ratio",         m_current_ratio),
+    "cashflow_quality": ("Cash Flow Quality",     m_cashflow_quality),
+    "dividend":         ("Dividend",              m_dividend),
+    "capital_adequacy": ("Capital Adequacy",      m_capital_adequacy),
+    "price_trend":      ("Share Price Trend",     m_price_trend),
 }
 
 
@@ -415,7 +446,11 @@ def score_company(scrape: Dict) -> Dict:
 
     for key, weight in weights.items():
         label, func = METRIC_FUNCS[key]
-        result = func(fin, banking=banking)
+        if key == "price_trend":
+            result = func(fin, banking=banking,
+                          price_history=scrape.get("price_history", []))
+        else:
+            result = func(fin, banking=banking)
 
         if len(result) == 6:
             sub, value, display, note, src_note, estimated = result
@@ -436,6 +471,8 @@ def score_company(scrape: Dict) -> Dict:
             "status":      st,
             "note":        note,
             "source_note": src_note,
+            "source_doc":  src_note,   # v2: shown in explainer modal
+            "source_date": src_note,   # v2: shown in explainer modal
             "estimated":   estimated,
         })
 

@@ -9,7 +9,6 @@ The local engine. Run this (run.bat does it for you) and it:
         GET /api/health
         GET /api/stocks?refresh=1          -> current KSE-100/50/30/KMI-30 + all
         GET /api/analyze?symbol=OGDC       -> scrape + score one company, live
-        GET /api/compare?symbols=OGDC,HBL  -> several at once
 
 Every analyze call scrapes PSX *fresh* (subject to a short session cache so a
 double-click doesn't hammer the site). Nothing is precomputed and shipped — the
@@ -105,20 +104,6 @@ def analyze():
     except Exception as exc:  # noqa: BLE001
         return jsonify({"error": f"Analysis failed: {exc}", "symbol": symbol}), 500
 
-
-@app.route("/api/compare")
-def compare():
-    raw = request.args.get("symbols", "")
-    symbols = [s.strip().upper() for s in raw.split(",") if s.strip()][:4]
-    if not symbols:
-        return jsonify({"error": "Pass ?symbols=A,B,C"}), 400
-    out = []
-    for sym in symbols:
-        try:
-            out.append(_analyse(sym))
-        except Exception as exc:  # noqa: BLE001
-            out.append({"symbol": sym, "error": str(exc)})
-    return jsonify({"results": out})
 
 
 # ---------------------------------------------------------------------------

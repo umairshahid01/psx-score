@@ -18,14 +18,16 @@ price prediction and not investment advice.*
 - **Auto-updating stock universe.** The KSE-100 / KSE-50 / KSE-30 / KMI-30 and the full
   listed-symbol list are rebuilt from PSX on launch, so newly listed companies show up
   automatically.
-- **Smart scoring.** Eight weighted fundamentals (revenue growth, profit margin, EPS
-  growth, debt/equity, ROE, current ratio, cash-flow quality, dividend consistency).
+- **Smart scoring.** Nine equally-weighted fundamentals (revenue growth, profit margin, EPS
+  growth, debt/equity, ROE, current ratio, cash-flow quality, dividend consistency, and
+  **share-price trend**).
   Banks & financials are scored with a **separate model** (debt/equity is dropped,
-  capital adequacy is added, ROE weighted higher).
+  capital adequacy is added).
+  Every metric's **source document** and **date** are shown in the explainer modal.
 - **Honest about data.** Missing figures are dropped and weights re-normalised; you see a
   **coverage %** and a **data-confidence %** so you know how complete the picture is.
 - **Visual everything.** Animated health gauge, staggered metric bars, multi-year trend
-  charts (1Y / 3Y / 5Y / 10Y), price sparkline, and a compare view for up to 4 stocks.
+  charts (1Y / 3Y / 5Y / 10Y), price sparkline.
   Full **light & dark mode**.
 
 > **DEMO vs LIVE** — open `dashboard.html` on its own and it runs in **DEMO** mode with a
@@ -60,7 +62,7 @@ push an update, everyone who runs the `.bat` gets it automatically.
 | File | Role |
 |------|------|
 | `dashboard.html` | The whole front-end (UI, gauge, charts, animations). Works live or in demo. |
-| `analyzer.py`    | Flask server: serves the dashboard + `/api/analyze`, `/api/stocks`, `/api/compare`. |
+| `analyzer.py`    | Flask server: serves the dashboard + `/api/analyze`, `/api/stocks`. |
 | `psx_data.py`    | Builds & caches the live PSX stock universe (the auto-updating list). |
 | `scraper.py`     | Scrapes a company's profile, financial tables, price history, and report PDFs. |
 | `scorer.py`      | Pure scoring logic (no network): turns scraped data into the 0–100 score. |
@@ -114,30 +116,30 @@ get it on their next launch, no re-sharing needed.
    figure and its weight.
 5. Explore **trends**: switch the metric and the 1Y/3Y/5Y/10Y window; check the price
    sparkline.
-6. Hit **Compare**, add 2–4 stocks, and run them side by side.
-7. Toggle **light/dark** with the sun/moon button (your choice is remembered).
+6. Toggle **light/dark** with the sun/moon button (your choice is remembered).
 
 ---
 
 ## Scoring, in brief
 
-Each metric is scored 0–10 against sensible thresholds, multiplied by its weight, and
-summed to 0–100.
+Each metric is scored 0–10 against sensible thresholds, then **all metrics are
+weighted equally** and the average is scaled to 0–100.
 
 | Metric | Weight (general) | Good when |
 |--------|:---:|-----------|
-| Revenue growth (multi-yr CAGR) | 15% | strong, sustained growth |
-| Net profit margin | 15% | high & stable |
-| EPS growth (CAGR) | 15% | rising earnings per share |
-| Debt / equity | 15% | low leverage |
-| Return on equity | 15% | efficient use of capital |
-| Current ratio | 10% | healthy short-term liquidity |
-| Cash-flow quality (OCF vs net profit) | 10% | profits backed by real cash |
-| Dividend consistency | 5% | regular payouts |
+| Revenue growth (multi-yr CAGR) | 11.1% | strong, sustained growth |
+| Net profit margin | 11.1% | high & stable |
+| EPS growth (CAGR) | 11.1% | rising earnings per share |
+| Debt / equity | 11.1% | low leverage |
+| Return on equity | 11.1% | efficient use of capital |
+| Current ratio | 11.1% | healthy short-term liquidity |
+| Cash-flow quality (OCF vs net profit) | 11.1% | profits backed by real cash |
+| Dividend consistency | 11.1% | regular payouts |
+| Share-price trend (12-month) | 11.1% | upward momentum |
 
 **Banks / financials** use a model where debt/equity is removed, **capital adequacy** is
-added, and ROE carries more weight — because a bank's balance sheet doesn't read like an
-industrial company's.
+added, and there are 8 equally-weighted metrics — because a bank's balance sheet doesn't
+read like an industrial company's.
 
 Verdict bands: **Rock Solid** (85+), **Strong** (70+), **Decent** (55+), **Mixed** (40+),
 **Fragile** (25+), **Weak** (below 25).

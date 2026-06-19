@@ -70,7 +70,12 @@ LINE_ITEMS = {
         r"cash flows? from operating activities",
         r"operating activities",
     ],
-    "dividend_per_share": [r"dividend per share", r"cash dividend", r"interim dividend"],
+    "dividend_per_share": [
+        r"dividend per share", r"cash dividend", r"interim dividend",
+        r"final dividend", r"\bdps\b", r"total dividend",
+        r"dividend declared", r"proposed dividend", r"dividend.*\bper\b",
+        r"dividend.*\bshare\b", r"payout per share",
+    ],
     "shares_outstanding": [
         r"number of shares", r"shares outstanding", r"paid.?up.*shares",
         r"ordinary shares.*issued", r"issued.*shares",
@@ -326,10 +331,10 @@ def _gap_fill_record(rec: Dict) -> None:
             _set("eps", np_ / sh,
                  f"derived: net profit / shares (FY{yr})")
 
-    # ---- dividend: if never set, mark zero (no dividend paid) ----
-    if rec.get("dividend_per_share") is None:
-        _set("dividend_per_share", 0.0,
-             f"no dividend record found (FY{yr})")
+    # ---- dividend: do NOT default to 0 here ----
+    # The dedicated scrape_dividends() pass fills this in.
+    # Setting 0.0 blindly would incorrectly mark dividend-paying
+    # companies as non-payers when the table parser just missed the row.
 
 
 def _sub(a, b):
@@ -484,6 +489,120 @@ def parse_report_pdf(pdf_url: str, session) -> Dict:
 
 
 # ---------------------------------------------------------------------------
+# Dividend scraping — dedicated multi-strategy pass
+# ---------------------------------------------------------------------------
+
+_DIV_LABEL_RE = re.compile(
+    r"cash\s*divid|interim\s*divid|final\s*divid|total\s*divid|divid.*per\s*share"
+    r"|\bdps\b|payout\s*per\s*share|proposed\s*divid|dividend\s*declar",
+    re.I,
+)
+
+_ANNOUNCEMENT_DIV_RE = re.compile(
+    r"(?:cash\s+)?dividend.*?(?:rs\.?|pkr)\s*([\d,.]+)"
+    r"|(?:rs\.?|pkr)\s*([\d,.]+)\s*(?:per\s*share\s*)?(?:cash\s+)?dividend"
+    r"|(\d+)\s*%\s*(?:cash\s+)?dividend"          # "150% dividend" → 15 per share (face 10)
+    r"|(?:cash\s+)?dividend.*?(\d+(?:\.\d+)?)\s*%",  # "dividend of 200%" → 20 per share
+    re.I,
+)
+
+
+def scrape_dividends(symbol: str, session, profile: dict = None) -> Dict[int, float]:
+    """
+    Dedicated dividend scraper.  Tries multiple strategies:
+      1. Scan announcement / corporate-action tables on the company page
+      2. Scan financial statement tables (already done by the main parser, but
+         do a focused pass looking only for dividend rows with relaxed matching)
+      3. Derive from dividend yield + share price if both are in the profile
+    Returns {fiscal_year: dividend_per_share_amount}.
+    """
+    url = config.PSX_COMPANY_URL.format(symbol=symbol)
+    html = utils.fetch(url, session=session)
+    divs: Dict[int, float] = {}
+
+    if not html:
+        return divs
+
+    soup = BeautifulSoup(html, "lxml")
+    current_year = datetime.now().year
+
+    # --- Strategy 1: scan ALL tables for dividend-related rows ---------------
+    for table in soup.find_all("table"):
+        years = _detect_year_columns(table)
+        for row in table.find_all("tr"):
+            cells = row.find_all(["td", "th"])
+            if len(cells) < 2:
+                continue
+            label = _text(cells[0]).lower()
+            if not _DIV_LABEL_RE.search(label):
+                continue
+            values = [_text(c) for c in cells[1:]]
+            for col_idx, year in years.items():
+                if col_idx - 1 < len(values):
+                    num = utils.to_number(values[col_idx - 1])
+                    if num is not None and num >= 0:
+                        # PSX sometimes shows dividends as % of face value (Rs 10)
+                        # A DPS > 500 almost certainly is a percentage
+                        if num > 500:
+                            num = num / 100 * 10  # convert % to Rs per share (face=10)
+                        divs.setdefault(year, 0.0)
+                        divs[year] = max(divs[year], num)  # keep largest (total annual)
+
+    # --- Strategy 2: scan announcement / payout blocks -----------------------
+    # PSX pages sometimes have an announcements section with plain-text lines
+    # like "Interim Cash Dividend Rs.5/- per share" or "200% Cash Dividend"
+    for block in soup.find_all(
+        True, string=re.compile(r"divid", re.I)
+    ):
+        text = _text(block) + " " + _text(block.parent)
+        m = _ANNOUNCEMENT_DIV_RE.search(text)
+        if not m:
+            continue
+
+        # Determine the amount
+        amount = None
+        if m.group(1):
+            amount = utils.to_number(m.group(1))
+        elif m.group(2):
+            amount = utils.to_number(m.group(2))
+        elif m.group(3):
+            # Percentage of face value (face = Rs 10 for most PSX stocks)
+            pct = utils.to_number(m.group(3))
+            if pct is not None:
+                amount = pct / 100 * 10
+        elif m.group(4):
+            pct = utils.to_number(m.group(4))
+            if pct is not None:
+                amount = pct / 100 * 10
+
+        if amount is None or amount <= 0:
+            continue
+
+        # Try to associate with a year
+        ym = _YEAR_RE.search(text)
+        year = None
+        if ym:
+            year = int(ym.group(1))
+            if year < 100:
+                year += 2000
+        if year is None or year < 1990 or year > current_year + 1:
+            year = current_year  # best guess: current year
+
+        divs.setdefault(year, 0.0)
+        divs[year] += amount  # accumulate interim + final
+
+    # --- Strategy 3: derive from dividend yield in the profile ---------------
+    if profile and not divs:
+        dy = profile.get("dividend_yield")
+        px = profile.get("price")
+        if dy and px and dy > 0 and px > 0:
+            estimated_dps = round(px * dy / 100, 2)
+            divs[current_year] = estimated_dps
+
+    return divs
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
 
@@ -554,6 +673,31 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
     # Final gap-fill pass on every record
     for rec in financials:
         _gap_fill_record(rec)
+
+    # --- Dedicated dividend scraping pass ---
+    # The main table parser often misses dividends because PSX shows them
+    # in announcement sections, not inside financial-statement tables.
+    dividend_map = scrape_dividends(symbol, session, profile)
+    if dividend_map:
+        for rec in financials:
+            yr = rec.get("year")
+            if yr and yr in dividend_map and (
+                rec.get("dividend_per_share") is None
+                or rec["dividend_per_share"] == 0.0
+            ):
+                rec["dividend_per_share"] = dividend_map[yr]
+                rec.setdefault("_sources", {})[
+                    "dividend_per_share"
+                ] = f"PSX payout announcement (FY{yr})"
+
+    # After the dedicated dividend pass, mark any remaining None as 0.0
+    # (meaning we've genuinely searched everywhere and found nothing)
+    for rec in financials:
+        if rec.get("dividend_per_share") is None:
+            rec["dividend_per_share"] = 0.0
+            rec.setdefault("_sources", {})[
+                "dividend_per_share"
+            ] = f"no dividend record found after full search (FY{rec.get('year', '?')})"
 
     quality = _data_quality(profile, financials)
 
