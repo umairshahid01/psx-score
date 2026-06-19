@@ -83,7 +83,7 @@ _NUM_RE = re.compile(r"-?\(?\d[\d,]*\.?\d*\)?")
 # Bare single letters are allowed here because the \b guard stops them matching
 # unrelated following words ("100 members" does not become 100 million).
 _SUFFIX_SCALE = [
-    (re.compile(r"^(bn|billion)\b"), 1e9),
+    (re.compile(r"^(b|bn|billion)\b"), 1e9),
     (re.compile(r"^(cr|crore)\b"), 1e7),
     (re.compile(r"^(mn|mln|million|m)\b"), 1e6),
     (re.compile(r"^(lac|lakh)\b"), 1e5),

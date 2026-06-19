@@ -217,6 +217,17 @@ def scrape_profile(symbol: str, session) -> Dict:
         "week52_high": [r"52.*high", r"high.*52"],
         "week52_low": [r"52.*low", r"low.*52"],
         "volume": [r"^volume$", r"\bvol\b"],
+        # v2: extract all available financial ratios from the profile section
+        "book_value": [r"book\s*value"],
+        "current_ratio_profile": [r"current\s*ratio"],
+        "debt_to_equity_profile": [r"debt.?to.?equity", r"long\s*term\s*debt\s*to\s*equity",
+                                   r"d/?e\s*ratio"],
+        "roe_profile": [r"return\s*on\s*equity", r"\broe\b"],
+        "net_margin_profile": [r"net\s*profit\s*margin", r"net\s*margin"],
+        "gross_margin_profile": [r"gross\s*profit\s*margin", r"gross\s*margin"],
+        "cash_payout_profile": [r"cash\s*payout", r"payout\s*ratio"],
+        "interest_cover_profile": [r"interest\s*cover"],
+        "equity_to_assets_profile": [r"equity\s*to\s*assets"],
     }
 
     pairs = _harvest_label_value_pairs(soup)
@@ -226,6 +237,24 @@ def scrape_profile(symbol: str, session) -> Dict:
                 num = utils.to_number(value)
                 if num is not None:
                     profile[field] = num
+                    break
+
+    # --- market_cap sanity check ---
+    # PSX often shows market cap in millions without a suffix. If we have
+    # both price and shares, derive the correct value. Otherwise, try common
+    # scale factors (×1e6 for millions).
+    px = profile.get("price")
+    sh = profile.get("shares")
+    if px and sh and px > 0 and sh > 0:
+        profile["market_cap"] = px * sh                 # authoritative
+    elif profile.get("market_cap"):
+        mc = profile["market_cap"]
+        # if the raw value looks oddly small, PSX likely shows it "in millions"
+        if mc < 1e9 and px and px > 0:
+            for scale in [1e9, 1e6, 1e3]:
+                candidate = mc * scale
+                if candidate > 1e10:
+                    profile["market_cap"] = candidate
                     break
 
     return profile
@@ -278,13 +307,15 @@ def scrape_financial_tables(symbol: str, session) -> List[Dict]:
     return records
 
 
-def _gap_fill_record(rec: Dict) -> None:
+def _gap_fill_record(rec: Dict, profile: Dict = None) -> None:
     """
-    Fill every missing field using accounting identities and conservative
-    industry proxies so that no metric is left as None.
+    Fill every missing field using accounting identities and — when available —
+    real financial ratios scraped from the PSX profile section. Falls back to
+    conservative industry proxies only as a last resort.
     """
     yr = rec.get("year", "?")
     src = rec.setdefault("_sources", {})
+    p = profile or {}
 
     def _set(field, value, reason):
         if rec.get(field) is None and value is not None:
@@ -302,18 +333,46 @@ def _gap_fill_record(rec: Dict) -> None:
          _add(rec.get("total_equity"), rec.get("total_liabilities")),
          f"derived: equity + liabilities (FY{yr})")
 
-    # ---- total_debt proxy: if missing, use total_liabilities as upper bound ----
-    if rec.get("total_debt") is None and rec.get("total_liabilities") is not None:
-        _set("total_debt", rec["total_liabilities"] * 0.7,
-             f"estimated ~70% of total liabilities as debt (FY{yr})")
+    # ---- total_equity from book_value × shares ----
+    if rec.get("total_equity") is None:
+        bv = p.get("book_value")
+        sh = p.get("shares")
+        if bv and sh and bv > 0 and sh > 0:
+            _set("total_equity", bv * sh,
+                 f"derived: book value Rs{bv:.1f} × {sh:.0f} shares")
 
-    # ---- current assets / liabilities proxies ----
-    # PSX financials often omit the split; use industry-typical ratios
+    # ---- total_debt: from profile D/E ratio × equity, else proxy ----
+    if rec.get("total_debt") is None:
+        de = p.get("debt_to_equity_profile")
+        eq = rec.get("total_equity")
+        if de is not None and eq:
+            _set("total_debt", de * eq,
+                 f"derived: D/E {de:.2f} × equity (profile ratio, FY{yr})")
+        elif rec.get("total_liabilities") is not None:
+            _set("total_debt", rec["total_liabilities"] * 0.7,
+                 f"estimated ~70% of total liabilities as debt (FY{yr})")
+
+    # ---- current assets / liabilities: from profile current ratio, else proxy ----
     ta = rec.get("total_assets")
     tl = rec.get("total_liabilities")
+    cr_profile = p.get("current_ratio_profile")
     if rec.get("current_assets") is None and ta is not None:
-        _set("current_assets", ta * 0.40,
-             f"estimated ~40% of total assets (FY{yr})")
+        pct_ca = 0.40  # default
+        if cr_profile and cr_profile > 0 and tl:
+            # estimate current_liabilities first, then current_assets
+            est_cl = tl * 0.55
+            est_ca = cr_profile * est_cl
+            if est_ca <= ta:
+                _set("current_assets", est_ca,
+                     f"derived: CR {cr_profile:.2f} × est. CL (profile ratio, FY{yr})")
+                _set("current_liabilities", est_cl,
+                     f"estimated ~55% of total liabilities (FY{yr})")
+            else:
+                _set("current_assets", ta * pct_ca,
+                     f"estimated ~40% of total assets (FY{yr})")
+        else:
+            _set("current_assets", ta * pct_ca,
+                 f"estimated ~40% of total assets (FY{yr})")
     if rec.get("current_liabilities") is None and tl is not None:
         _set("current_liabilities", tl * 0.55,
              f"estimated ~55% of total liabilities (FY{yr})")
@@ -326,7 +385,7 @@ def _gap_fill_record(rec: Dict) -> None:
     # ---- EPS: derive from net_profit and shares_outstanding if available ----
     if rec.get("eps") is None:
         np_ = rec.get("net_profit")
-        sh  = rec.get("shares_outstanding")
+        sh  = rec.get("shares_outstanding") or p.get("shares")
         if np_ is not None and sh is not None and sh > 0:
             _set("eps", np_ / sh,
                  f"derived: net profit / shares (FY{yr})")
@@ -670,9 +729,9 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
                         f"annual report PDF ({reports[0].get('title', '')})"
             warnings.append("Some figures were filled from the annual-report PDF.")
 
-    # Final gap-fill pass on every record
+    # Final gap-fill pass on every record (with profile ratios)
     for rec in financials:
-        _gap_fill_record(rec)
+        _gap_fill_record(rec, profile=profile)
 
     # --- Dedicated dividend scraping pass ---
     # The main table parser often misses dividends because PSX shows them
