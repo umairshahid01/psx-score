@@ -2,13 +2,9 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0a0e17">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="PSX·SCORE">
-<link rel="manifest" href="/manifest.json">
-<title>PSX·SCORE</title>
+<title>PSX·SCORE — Fundamental Health</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -293,17 +289,6 @@ html[data-theme="light"] .loader{background:rgba(238,242,248,.85)}
 #confetti{position:fixed;inset:0;z-index:88;pointer-events:none;display:none}
 #confetti.show{display:block}
 
-/* ====================== INSTALL BANNER ====================== */
-.install-banner{display:none;padding:14px;margin-bottom:10px;border-radius:14px;background:var(--bull-dim);
-  border:1px solid var(--bull);text-align:center}
-.install-banner.show{display:block;animation:rise .4s ease}
-.install-banner p{font:600 13px 'Inter';color:var(--bull);margin-bottom:8px}
-.install-btn{padding:10px 22px;border-radius:10px;border:none;background:var(--bull);color:#04140f;
-  font:700 13px 'Space Grotesk';cursor:pointer}
-.install-btn:active{transform:scale(.95)}
-.install-dismiss{background:transparent;border:none;color:var(--bull);font:600 12px 'Inter';cursor:pointer;
-  margin-left:12px;text-decoration:underline}
-
 /* ====================== REDUCED MOTION ====================== */
 @media(prefers-reduced-motion:reduce){
   *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
@@ -311,17 +296,72 @@ html[data-theme="light"] .loader{background:rgba(238,242,248,.85)}
 :focus-visible{outline:2px solid var(--bull);outline-offset:2px;border-radius:6px}
 
 /* ====================================================================
-   RESPONSIVE — TABLET & DESKTOP
-   The mobile-first rules above are the base layer (unchanged). The
-   layers below progressively enhance wider screens, so a single file
-   serves phones, tablets and laptops. Anything that works in a desktop
-   browser works in a mobile browser — same HTML, same logic.
+   LAYOUT — DESKTOP / LAPTOP
+   This is a laptop-only build: the desktop dashboard layout is the base.
+   A single narrow-window fallback (<=880px) just keeps things readable if
+   the browser window is dragged small. No phone or PWA behaviour.
    ==================================================================== */
 
-/* Hover affordances — pointer devices only; touch keeps the :active feel */
+/* App shell + header */
+.app{max-width:1160px;padding:0 32px 90px}
+.header{padding:20px 0 14px}
+.header::after{left:-32px;right:-32px}
+.brand-text h1{font-size:20px}
+.logo{width:42px;height:42px;border-radius:12px}
+.logo svg{width:26px;height:26px}
+.bg-glow{background:
+  radial-gradient(48% 38% at 86% -6%,var(--bull-dim),transparent 60%),
+  radial-gradient(42% 34% at 7% 0%,rgba(255,182,39,.06),transparent 55%)}
+
+/* Search row: input grows, Analyze sits beside it, index chips below */
+.search-section{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:18px 0 6px}
+.search-box{order:1;flex:1 1 360px;min-width:0}
+.btn-analyze{order:2;width:auto;flex:0 0 auto;margin-top:0;padding:14px 30px;font-size:15px}
+.chips{order:3;flex:1 1 100%;padding:6px 0 2px}
+.empty{padding:64px 16px}
+
+/* Result: gauge + company card side by side */
+.stage{padding-top:20px}
+.stage-top{display:grid;grid-template-columns:minmax(330px,.85fr) 1.15fr;gap:18px;margin-bottom:18px;align-items:stretch}
+.stage-top .panel{margin-bottom:0;height:100%}
+.score-card{padding:30px 24px;display:flex;flex-direction:column;justify-content:center}
+.gauge-wrap{max-width:300px}
+.score-num{font-size:54px}
+.v-label{font-size:24px}
+.v-blurb{font-size:13px;max-width:380px;margin-left:auto;margin-right:auto}
+.co-card{padding:24px;display:flex;flex-direction:column}
+.co-name{font-size:24px}
+.co-symbol{font-size:13px}
+.price{font-size:32px}
+.stat-grid{gap:10px}
+
+/* Section blocks */
+.block{margin-bottom:0}
+.section-title{padding:24px 0 12px}
+.section-title h2{font-size:16px}
+
+/* Breakdown: two-column metric grid (robust for any metric count) */
+.metrics-panel{display:grid;grid-template-columns:1fr 1fr;column-gap:42px;row-gap:0;padding:10px 26px 20px}
+.metric{border-bottom:none;border-top:1px solid var(--border);padding:14px 0}
+.metric:nth-child(1),.metric:nth-child(2){border-top:none}
+.metric:last-child{border-bottom:none}
+
+/* Trends: wide chart */
+.trends-panel{padding:18px 26px 24px}
+.chart-box{height:360px}
+.footer{margin-top:36px}
+
+/* KPI / confidence modal as a centered dialog */
+.modal-overlay{align-items:center}
+.modal-card{max-width:560px;border-radius:20px;padding:26px 24px;animation:dlgIn .22s cubic-bezier(.2,.8,.3,1)}
+.modal-handle{display:none}
+.km-block{padding:14px 15px}
+@keyframes dlgIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+
+/* Hover affordances (laptop pointer) */
 @media (hover:hover) and (pointer:fine){
   .chip:hover{border-color:var(--border-strong);color:var(--text)}
-  .opt:hover{background:var(--bull-dim)}
+  .opt:hover{background:var(--bull-dim);cursor:pointer}
   .tgl:hover{border-color:var(--border-strong)}
   .m-info:hover{background:var(--bull-dim);border-color:var(--bull);color:var(--bull)}
   .seg button:hover:not(.on){color:var(--text)}
@@ -329,83 +369,24 @@ html[data-theme="light"] .loader{background:rgba(238,242,248,.85)}
   .btn-analyze:hover{transform:translateY(-1px);filter:brightness(1.05)}
   .km-close:hover{border-color:var(--bear);color:var(--bear)}
   .dq-info:hover{color:var(--muted)}
-  .o-name,.opt{cursor:pointer}
 }
 
-/* ---------- TABLET (≥ 720px) ---------- */
-@media (min-width:720px){
-  .app{max-width:720px;padding:0 24px 80px}
-  .header{padding:20px 0 14px}
-  .header::after{left:-24px;right:-24px}
-  .brand-text h1{font-size:20px}
-  .brand-text .sub{font-size:10px}
-  .logo{width:42px;height:42px;border-radius:12px}
-  .logo svg{width:26px;height:26px}
-
-  /* Search becomes a single row: input grows, Analyze sits beside it, chips below */
-  .search-section{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:18px 0 6px}
-  .search-box{order:1;flex:1 1 340px;min-width:0}
-  .btn-analyze{order:2;width:auto;flex:0 0 auto;margin-top:0;padding:14px 28px;font-size:15px}
-  .chips{order:3;flex:1 1 100%;padding:6px 0 2px}
-
-  .empty{padding:60px 16px}
-}
-
-/* ---------- DESKTOP (≥ 1024px) ---------- */
-@media (min-width:1024px){
-  .app{max-width:1160px;padding:0 32px 90px}
-  .header::after{left:-32px;right:-32px}
-  .bg-glow{background:
-    radial-gradient(48% 38% at 86% -6%,var(--bull-dim),transparent 60%),
-    radial-gradient(42% 34% at 7% 0%,rgba(255,182,39,.06),transparent 55%)}
-
-  .stage{padding-top:20px}
-
-  /* Score gauge + company card sit side by side */
-  .stage-top{display:grid;grid-template-columns:minmax(330px,.85fr) 1.15fr;gap:18px;margin-bottom:18px;align-items:stretch}
-  .stage-top .panel{margin-bottom:0;height:100%}
-  .score-card{padding:28px 22px;display:flex;flex-direction:column;justify-content:center}
-  .gauge-wrap{max-width:300px}
-  .score-num{font-size:54px}
-  .v-label{font-size:24px}
-  .v-blurb{font-size:13px;max-width:360px;margin-left:auto;margin-right:auto}
-  .co-card{padding:24px;display:flex;flex-direction:column}
-  .co-name{font-size:24px}
-  .co-symbol{font-size:13px}
-  .price{font-size:32px}
-  .stat-grid{gap:10px}
-
-  /* Section blocks */
-  .block{margin-bottom:0}
-  .section-title{padding:24px 0 12px}
-  .section-title h2{font-size:16px}
-
-  /* Breakdown: two-column metric grid (robust for any metric count) */
-  .metrics-panel{display:grid;grid-template-columns:1fr 1fr;column-gap:42px;row-gap:0;padding:10px 26px 20px}
-  .metric{border-bottom:none;border-top:1px solid var(--border);padding:14px 0}
-  .metric:nth-child(1),.metric:nth-child(2){border-top:none}
-  .metric:last-child{border-bottom:none}
-
-  /* Trends: taller, wider chart */
-  .trends-panel{padding:18px 26px 24px}
-  .chart-box{height:360px}
-
-  .footer{margin-top:36px}
-
-  /* KPI / confidence modal becomes a centered dialog instead of a bottom sheet */
-  .modal-overlay{align-items:center}
-  .modal-card{max-width:540px;border-radius:20px;padding:26px 24px;
-    animation:dlgIn .22s cubic-bezier(.2,.8,.3,1)}
-  .modal-handle{display:none}
-  .km-block{padding:14px 15px}
-}
-@keyframes dlgIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
-
-/* ---------- LARGE DESKTOP (≥ 1440px) ---------- */
+/* Extra-wide screens */
 @media (min-width:1440px){
   .app{max-width:1280px}
   .stage-top{grid-template-columns:minmax(360px,.8fr) 1.2fr}
   .chart-box{height:400px}
+}
+
+/* Narrow-window fallback — not a phone layout, just keeps it usable */
+@media (max-width:880px){
+  .app{max-width:680px;padding:0 18px 70px}
+  .header::after{left:-18px;right:-18px}
+  .stage-top{grid-template-columns:1fr}
+  .metrics-panel{grid-template-columns:1fr;column-gap:0}
+  .metric{border-top:none;border-bottom:1px solid var(--border)}
+  .metric:last-child{border-bottom:none}
+  .chart-box{height:300px}
 }
 </style>
 </head>
@@ -438,13 +419,6 @@ html[data-theme="light"] .loader{background:rgba(238,242,248,.85)}
         </svg>
       </button>
     </div>
-  </div>
-
-  <!-- INSTALL BANNER -->
-  <div class="install-banner" id="install-banner">
-    <p>Install PSX·SCORE for quick one-tap access</p>
-    <button class="install-btn" id="install-btn">Install App</button>
-    <button class="install-dismiss" id="install-dismiss">Not now</button>
   </div>
 
   <!-- SEARCH -->
@@ -1043,21 +1017,6 @@ function burstConfetti(){
 }
 
 /* =================================================================
-   PWA INSTALL
-   ================================================================= */
-let deferredPrompt=null;
-window.addEventListener('beforeinstallprompt',e=>{
-  e.preventDefault();deferredPrompt=e;
-  $('install-banner').classList.add('show');
-});
-$('install-btn').addEventListener('click',async()=>{
-  if(!deferredPrompt)return;deferredPrompt.prompt();
-  const{outcome}=await deferredPrompt.userChoice;deferredPrompt=null;
-  $('install-banner').classList.remove('show');
-});
-$('install-dismiss').addEventListener('click',()=>$('install-banner').classList.remove('show'));
-
-/* =================================================================
    HELPERS
    ================================================================= */
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');
@@ -1095,8 +1054,6 @@ async function init(){
   $('kpi-modal').addEventListener('click',e=>{if(e.target===$('kpi-modal'))hideModal();});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')hideModal();});
   $('footer-ts').textContent=LIVE?'Live mode':'Demo mode';
-  // Register service worker (only when served over http/https; harmless to skip on file://)
-  if(location.protocol.startsWith('http')&&'serviceWorker' in navigator){try{await navigator.serviceWorker.register('sw.js');}catch(e){}}
 }
 document.addEventListener('DOMContentLoaded',init);
 </script>
