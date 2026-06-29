@@ -1,136 +1,111 @@
-# PSX·SCORE Mobile — Progressive Web App
+# PSX·SCORE — Fundamental Health Analyzer
 
-A mobile-optimized version of the PSX·SCORE fundamental analyzer that runs on **any phone** with **zero installation hassle**.
+Score any **Pakistan Stock Exchange** listed company's fundamentals from **0 to 100**,
+with an animated health gauge, a per-metric breakdown (each with a plain-English explainer
+and the exact source document it came from), and 1/3/5/10-year historical trend charts.
 
-Friends open a URL → tap "Add to Home Screen" → an app icon appears like a native app. No App Store, no APK, no permissions.
-
----
-
-## What's in this folder
-
-| File | Purpose |
-|---|---|
-| `index.html` | The mobile PWA dashboard (single file, embeds demo data) |
-| `manifest.json` | PWA manifest — makes it installable |
-| `sw.js` | Service worker — caches app shell for instant launch + offline |
-| `icon-192.png`, `icon-512.png` | App icons used on the home screen |
-| `apple-touch-icon.png`, `favicon-32.png` | iOS / browser tab icons |
-| `api.py` | Flask backend — same `/api/*` endpoints as the desktop version |
-| `config.py`, `utils.py`, `psx_data.py`, `scraper.py`, `scorer.py` | Backend modules (unchanged from desktop) |
-| `requirements.txt`, `runtime.txt`, `Procfile`, `render.yaml` | Cloud deployment config |
-| `gen_icons.py`, `build.py` | Build scripts (only used when regenerating assets) |
+**One file. Two layouts.** `index.html` is a single, self-contained, fully responsive web
+app. The same file lays itself out for a phone or a laptop automatically — if it works in a
+desktop browser it works in a mobile browser, because it's the same HTML. Just share the
+file; there's nothing to install.
 
 ---
 
-## Deploy in 5 minutes (Render — recommended)
+## Two ways to run it
 
-1. **Create a new GitHub repo** (or new branch in your existing one) and push every file in this folder.
-2. Go to **https://render.com** → sign in with GitHub (free).
-3. Click **New +** → **Web Service** → select your repo.
-4. Render auto-detects `render.yaml` — just click **Apply**.
-5. Wait ~3 min for first build. You'll get a URL like `https://psx-score-api.onrender.com`.
-6. Send that URL to your friends.
+| | How | What you get |
+|---|---|---|
+| **Share mode (DEMO)** | Send `index.html` to a colleague. They double-click it (or you host it). | Runs offline in **DEMO** mode with 7 fully-loaded sample companies (OGDC, LUCK, SYS, HBL, ENGRO, KTML, SAZEW). No backend, no setup. |
+| **Live mode** | Launch through `run.bat` (local) **or** host `api.py` on Render/Railway. | Flips to **LIVE** mode and scrapes real PSX data on every Analyze, for the full stock universe. |
 
-That's it. The same URL serves the PWA dashboard **and** the live scraping backend.
+The app decides automatically: on load it pings the backend at `/api/health`. If it answers,
+you get the green **LIVE** badge; if not, it shows the gold **DEMO** badge and uses the data
+embedded at the bottom of the file. No flags to set.
 
-> **Note on Render free tier:** the server sleeps after 15 min of inactivity. First request after a sleep takes ~30 sec to wake — subsequent requests are instant. For zero-cold-start, upgrade to the $7/mo plan or use Railway.
-
----
-
-## Alternative: Deploy on Railway
-
-1. Go to **https://railway.app** → sign in with GitHub.
-2. **New Project** → **Deploy from GitHub repo** → pick your repo.
-3. Railway reads `Procfile` automatically. Deploy.
-4. Under **Settings** → **Networking**, click **Generate Domain**.
-
-Railway has $5/month free credit, no sleep — better than Render for shared use.
+> **Hosting the file elsewhere and want LIVE mode?** Open `index.html`, find `const API_BASE="";`
+> near the top of the script, and set it to your backend URL
+> (e.g. `const API_BASE="https://psx-score.onrender.com";`). Leave it blank for same-origin.
 
 ---
 
-## What the friend's experience looks like
+## Sharing with colleagues (the simple path)
 
-### On Android (Chrome / Edge / Samsung Internet)
-1. Friend opens the URL.
-2. After a few seconds of browsing, Chrome shows an **"Install app"** banner at the bottom — or the built-in install prompt I wired into the header appears.
-3. Tap **Install** → app icon appears on home screen → tap → opens fullscreen, no browser UI.
+1. Send them **`index.html`** (WhatsApp, email, Drive — anything).
+2. They open it. On a laptop it opens wide; on a phone it opens as a single column.
+3. They search a sample ticker and hit **Analyze**.
 
-### On iPhone (Safari)
-1. Friend opens the URL in **Safari** (Chrome on iOS doesn't support PWA install).
-2. Tap the **Share** button (square with up arrow) → scroll → **Add to Home Screen**.
-3. App icon appears on home screen → tap → opens fullscreen.
-
-Both feel and look identical to a real installed app — splash screen, app icon, no browser bar, fullscreen layout.
+That's it. No Python, no `.bat`, no app store.
 
 ---
 
-## How it stays up-to-date
+## Hosting it online (optional, for LIVE data for everyone)
 
-Same model as the desktop version:
-- Edit `index.html` on GitHub → push → Render auto-rebuilds (~2 min).
-- Service worker fetches the new shell on next visit; users get the update automatically.
-- API logic (`scraper.py`, `scorer.py`) lives on the server — instant updates for everyone.
+The repo already includes a cloud backend (`api.py`) and deploy config.
 
-No re-installation needed, ever.
-
----
-
-## Mobile-specific design changes vs. desktop
-
-- **Layout:** single column, max 480px wide, all panels stack vertically.
-- **Search dropdown:** inline below the input field instead of overlay.
-- **Modals:** bottom sheet style (slide up from bottom) instead of centered overlay — natural on touch.
-- **Gauge dial:** smaller and centered in the score card.
-- **Trends chart:** 240px tall (vs 340 on desktop) to fit comfortably above the fold.
-- **Tap targets:** all buttons ≥ 38px tall (Apple HIG / Material guidelines).
-- **Sticky header** with the brand + theme toggle.
-- **Safe area insets:** respects notches and home indicators on iOS.
-- **No background canvas particles** — saves battery on mobile.
-- **No ticker tape** — vertical space is at a premium.
+1. Push the repo to GitHub.
+2. Go to **render.com** → New Web Service → pick the repo → it reads `render.yaml` → **Apply**.
+3. You get a URL like `https://psx-score.onrender.com` that serves the app **and** the live engine.
+4. Share that URL. On HTTPS, browsers also offer **Install** (adds an icon to the home screen / desktop).
 
 ---
 
-## Local development / testing
+## What changed in this version
+
+The previous separate **mobile PWA** and **desktop** front-ends are now **one responsive
+`index.html`**. Mobile behaviour is unchanged; tablet (≥720px) and desktop (≥1024px) layers were
+added on top — a two-column score/company header, a two-column metric grid, a taller trend
+chart, hover states for pointers, and a centered dialog (instead of a bottom sheet) for the
+explainer popups on large screens. Pinch-zoom is now allowed for accessibility.
+
+---
+
+## Files
+
+**Updated this round**
+
+| File | Role |
+|------|------|
+| `index.html` | **The app.** Single responsive file (desktop + mobile), with demo data embedded. This is the one you share. |
+| `index_template.html` | Source template (same file, minus the embedded data blob). Edit this, then rebuild. |
+| `manifest.json` | PWA manifest (install metadata; orientation no longer locked to portrait). |
+| `sw.js` | Service worker — caches the app shell when hosted (skipped harmlessly on `file://`). |
+| `README.md` | This file. |
+
+**Build helper**
+
+| File | Role |
+|------|------|
+| `build.py` | Rebuilds `index.html` = `index_template.html` with `demo_bundle.json` injected. Run after editing the template. |
+| `demo_bundle.json` | The embedded demo dataset (universe + 7 analyses). |
+| `gen_icons.py` | Regenerates the PNG icons. |
+| `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, `favicon-32.png` | App / tab icons. |
+
+**Backend (only used for LIVE mode)**
+
+| File | Role |
+|------|------|
+| `api.py` | Flask engine: serves the app + `/api/health`, `/api/stocks`, `/api/analyze`. |
+| `config.py`, `utils.py`, `psx_data.py`, `scraper.py`, `scorer.py` | Scraping + scoring modules. |
+| `requirements.txt`, `runtime.txt`, `Procfile`, `render.yaml` | Cloud deploy config. |
+
+---
+
+## Rebuilding after an edit
+
+Edit `index_template.html`, then:
 
 ```bash
-pip install -r requirements.txt
-python api.py
-```
-
-Open `http://localhost:5000` in your phone's browser (same WiFi as your laptop) — use your laptop's local IP instead of localhost.
-
-To regenerate icons after editing `gen_icons.py`:
-```bash
-python gen_icons.py
-```
-
-To regenerate `index.html` after editing the template:
-```bash
-python build.py
+python build.py        # writes index.html with the demo data injected
 ```
 
 ---
 
-## Sharing the install link
+## Scoring, in brief
 
-A clean URL like `https://psx-score-api.onrender.com` works on any phone. For an even simpler share, set up a custom domain on Render (free) or shorten via [is.gd](https://is.gd) / TinyURL.
+Nine checks, **equally weighted**, each scored 0–10 against sensible thresholds and summed to 0–100:
+revenue growth, net-profit margin, EPS growth, debt-to-equity, return on equity, current ratio,
+cash-flow quality, dividend consistency, and 12-month share-price trend. Banks use a model where
+debt/equity is swapped for capital adequacy. Each metric shows the **source document and date**
+behind its number, plus a **data-confidence** reading so you know how complete the picture is.
 
-WhatsApp message your friends:
-> Hey — try this PSX stock analyzer I built: https://your-app.onrender.com
-> Tap "Add to Home Screen" so it works like a real app 🚀
-
----
-
-## Troubleshooting
-
-**Install banner doesn't appear on Android**  
-The PWA must be served over HTTPS — Render/Railway give you HTTPS automatically, so this is only an issue if you're testing locally. Use a tunnel like ngrok if needed.
-
-**iOS users see no install prompt**  
-That's normal — iOS only supports manual "Add to Home Screen" via Safari's Share menu. The dashboard works fine in Safari, just doesn't auto-prompt.
-
-**Cold start takes 30s on first analyze (Render free)**  
-Expected. Either upgrade Render's plan, switch to Railway, or set up an uptime pinger (e.g. [UptimeRobot](https://uptimerobot.com) free tier) hitting `/api/health` every 10 minutes.
-
-**Friend wants offline access**  
-The app shell is cached by the service worker, so it opens instantly even offline — but `/api/analyze` requires network. Demo mode kicks in automatically if the backend is unreachable, showing the 7 pre-cached stocks (OGDC, LUCK, SYS, HBL, ENGRO, KTML, SAZEW).
+*Not investment advice.*

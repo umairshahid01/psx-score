@@ -1,6 +1,6 @@
 // PSX·SCORE Service Worker
 // Caches the app shell so it opens instantly; API calls always go to network.
-const CACHE = 'psx-score-v1';
+const CACHE = 'psx-score-v2';
 const SHELL = ['/', '/manifest.json'];
 
 self.addEventListener('install', (e) => {
