@@ -1004,6 +1004,7 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
         "warnings": warnings,
         "data_quality": quality,
         "scraped_at": scraped_at,
+        "sa_data": sa_data,   # StockAnalysis ratios for the scorer
     }
 
 

@@ -140,7 +140,7 @@ _SECTOR_CR_PROXY     = 1.3     # ratio
 _SECTOR_CF_PROXY     = 0.85    # ratio
 
 
-def m_revenue_growth(fin, banking=False):
+def m_revenue_growth(fin, banking=False, sa=None):
     field = "net_interest_income" if banking else "revenue"
     g = (_growth(fin, field, 3) or _growth(fin, "revenue", 3))
     yr_range = (_growth_years_used(fin, field, 3) or _growth_years_used(fin, "revenue", 3))
@@ -165,7 +165,7 @@ def m_revenue_growth(fin, banking=False):
     return sub, g, _fmt_pct(g, estimated), note, src, estimated
 
 
-def m_profit_margin(fin, banking=False):
+def m_profit_margin(fin, banking=False, sa=None):
     rev = _latest(fin, "revenue") or _latest(fin, "net_interest_income")
     np_ = _latest(fin, "net_profit")
     m = utils.pct(np_, rev)
@@ -190,7 +190,7 @@ def m_profit_margin(fin, banking=False):
     return sub, m, _fmt_pct(m, estimated), note, src, estimated
 
 
-def m_eps_growth(fin, banking=False):
+def m_eps_growth(fin, banking=False, sa=None):
     g = _growth(fin, "eps", 3)
     yr_range = _growth_years_used(fin, "eps", 3)
     estimated = False
@@ -222,7 +222,16 @@ def m_eps_growth(fin, banking=False):
     return sub, g, _fmt_pct(g, estimated), note, src, estimated
 
 
-def m_debt_to_equity(fin, banking=False):
+def m_debt_to_equity(fin, banking=False, sa=None):
+    sa = sa or {}
+    # Prefer StockAnalysis direct ratio (real, not derived)
+    if sa.get("debt_to_equity") is not None:
+        de = sa["debt_to_equity"]
+        sub = lower_better(de, 0.4, 2.0)
+        return (sub, de, _fmt_ratio(de, False),
+                "Debt-to-equity (lower is better)",
+                "StockAnalysis (S&P Global)", False)
+
     debt = _latest(fin, "total_debt")
     eq   = _latest(fin, "total_equity")
     estimated = False
@@ -255,7 +264,15 @@ def m_debt_to_equity(fin, banking=False):
     return sub, de, _fmt_ratio(de, estimated), note, src, estimated
 
 
-def m_roe(fin, banking=False):
+def m_roe(fin, banking=False, sa=None):
+    sa = sa or {}
+    # Prefer StockAnalysis direct ROE %
+    if sa.get("roe_pct") is not None:
+        roe = sa["roe_pct"]
+        sub = higher_better(roe, 5, 22)
+        return (sub, roe, _fmt_pct(roe, False), "Return on equity",
+                "StockAnalysis (S&P Global)", False)
+
     np_ = _latest(fin, "net_profit")
     eq  = _latest(fin, "total_equity")
     roe = utils.pct(np_, eq)
@@ -274,7 +291,15 @@ def m_roe(fin, banking=False):
     return sub, roe, _fmt_pct(roe, estimated), note, src, estimated
 
 
-def m_current_ratio(fin, banking=False):
+def m_current_ratio(fin, banking=False, sa=None):
+    sa = sa or {}
+    # Prefer StockAnalysis direct current ratio
+    if sa.get("current_ratio") is not None:
+        cr = sa["current_ratio"]
+        sub = band_better(cr, 0.8, 1.5, 3.0, 5.0)
+        return (sub, cr, _fmt_ratio(cr, False), "Current ratio (liquidity)",
+                "StockAnalysis (S&P Global)", False)
+
     ca = _latest(fin, "current_assets")
     cl = _latest(fin, "current_liabilities")
     estimated = False
@@ -307,7 +332,18 @@ def m_current_ratio(fin, banking=False):
     return sub, cr, _fmt_ratio(cr, estimated), note, src, estimated
 
 
-def m_cashflow_quality(fin, banking=False):
+def m_cashflow_quality(fin, banking=False, sa=None):
+    sa = sa or {}
+    # Prefer StockAnalysis direct OCF & net income (real values)
+    sa_ocf = sa.get("operating_cashflow")
+    sa_ni  = sa.get("net_profit")
+    if sa_ocf is not None and sa_ni is not None and sa_ni != 0:
+        ratio = sa_ocf / sa_ni
+        sub = higher_better(ratio, 0.4, 1.1)
+        return (sub, ratio, _fmt_ratio(ratio, False),
+                "Operating cash flow vs net profit",
+                "StockAnalysis (S&P Global)", False)
+
     ocf = _latest(fin, "operating_cashflow")
     np_ = _latest(fin, "net_profit")
     estimated = False
@@ -332,7 +368,7 @@ def m_cashflow_quality(fin, banking=False):
     return sub, ratio, _fmt_ratio(ratio, estimated), note, src, estimated
 
 
-def m_dividend(fin, banking=False):
+def m_dividend(fin, banking=False, sa=None):
     s = _series(fin, "dividend_per_share")
     estimated = False
 
@@ -351,7 +387,7 @@ def m_dividend(fin, banking=False):
     return sub, consistency * 100, disp, "Years a dividend was paid", yr_range, estimated
 
 
-def m_capital_adequacy(fin, banking=False):
+def m_capital_adequacy(fin, banking=False, sa=None):
     car = _latest(fin, "capital_adequacy")
     estimated = False
 
@@ -368,7 +404,7 @@ def m_capital_adequacy(fin, banking=False):
     return sub, car, _fmt_pct(car, estimated), note, src, estimated
 
 
-def m_price_trend(fin, banking=False, price_history=None):
+def m_price_trend(fin, banking=False, price_history=None, sa=None):
     """12-month share-price momentum.  Added in v2 scoring model."""
     from datetime import date as _date
     ph = price_history or []
@@ -444,13 +480,16 @@ def score_company(scrape: Dict) -> Dict:
     total_weight   = sum(weights.values())
     estimated_weight = 0.0
 
+    # StockAnalysis ratios merged during scraping (real, not derived)
+    sa = scrape.get("sa_data", {}) or {}
+
     for key, weight in weights.items():
         label, func = METRIC_FUNCS[key]
         if key == "price_trend":
-            result = func(fin, banking=banking,
+            result = func(fin, banking=banking, sa=sa,
                           price_history=scrape.get("price_history", []))
         else:
-            result = func(fin, banking=banking)
+            result = func(fin, banking=banking, sa=sa)
 
         if len(result) == 6:
             sub, value, display, note, src_note, estimated = result
