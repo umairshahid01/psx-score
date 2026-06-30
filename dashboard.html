@@ -705,6 +705,19 @@ function filterSymbols(q,idx){
   q=(q||'').trim().toUpperCase();
   let res = !q ? pool : pool.filter(s=>
     s.symbol.toUpperCase().includes(q) || (s.name||'').toUpperCase().includes(q));
+  if(q){
+    // Sort: exact symbol → symbol starts-with → symbol contains → name-only match
+    res=[...res].sort((a,b)=>{
+      const as=a.symbol.toUpperCase(), bs=b.symbol.toUpperCase();
+      const aExact=as===q, bExact=bs===q;
+      if(aExact!==bExact) return aExact?-1:1;
+      const aStarts=as.startsWith(q), bStarts=bs.startsWith(q);
+      if(aStarts!==bStarts) return aStarts?-1:1;
+      const aSym=as.includes(q), bSym=bs.includes(q);
+      if(aSym!==bSym) return aSym?-1:1;
+      return as.localeCompare(bs);
+    });
+  }
   // demo symbols first when offline, so previews are discoverable
   if(!LIVE) res=[...res].sort((a,b)=>(DEMO_SET.has(b.symbol)?1:0)-(DEMO_SET.has(a.symbol)?1:0));
   return res.slice(0,60);
