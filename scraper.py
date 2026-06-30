@@ -599,86 +599,110 @@ _PCT_FIELDS = {"roe_pct","roa_pct","profit_margin_pct","operating_margin_pct",
 
 
 def scrape_stockanalysis(symbol: str, session) -> Dict:
-    """Fetch comprehensive financial data from StockAnalysis.com."""
+    """Fetch comprehensive financial data from StockAnalysis.com.
+
+    This is the authoritative fallback when PSX is unreachable. It logs
+    loudly so failures are visible in the console, and it never raises —
+    any error returns {} so the caller degrades gracefully.
+    """
     url = _SA_URL.format(symbol=symbol)
-    html = utils.fetch(url, session=session)
-    if not html:
+    print(f"  [SA] fetching {url}")
+    try:
+        html = utils.fetch(url, session=session)
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [SA] fetch raised for {symbol}: {exc}")
         return {}
 
-    soup = BeautifulSoup(html, "lxml")
+    if not html:
+        print(f"  [SA] no HTML returned for {symbol} (blocked / 404 / timeout)")
+        return {}
+
     data: Dict = {}
+    try:
+        soup = BeautifulSoup(html, "lxml")
 
-    # Parse all label-value table rows
-    for table in soup.find_all("table"):
-        for row in table.find_all("tr"):
-            cells = row.find_all(["td", "th"])
-            if len(cells) < 2:
+        # Parse all label-value table rows
+        for table in soup.find_all("table"):
+            for row in table.find_all("tr"):
+                cells = row.find_all(["td", "th"])
+                if len(cells) < 2:
+                    continue
+                label = _text(cells[0]).lower().strip()
+                raw_val = _text(cells[-1])
+
+                field = _SA_MAP.get(label)
+                if not field:
+                    continue
+
+                # Handle percentage values
+                if field in _PCT_FIELDS:
+                    cleaned = raw_val.replace("%", "").replace("+", "").strip()
+                    num = utils.to_number(cleaned)
+                    if num is not None:
+                        data[field] = num
+                else:
+                    num = utils.to_number(raw_val)
+                    if num is not None:
+                        data[field] = num
+
+        # Also try harvesting from key-value pair divs (SA uses both)
+        pairs = _harvest_label_value_pairs(soup)
+        for label, raw_val in pairs:
+            field = _SA_MAP.get(label.lower().strip())
+            if not field or field in data:
                 continue
-            label = _text(cells[0]).lower().strip()
-            raw_val = _text(cells[-1])
-
-            field = _SA_MAP.get(label)
-            if not field:
-                continue
-
-            # Handle percentage values
             if field in _PCT_FIELDS:
                 cleaned = raw_val.replace("%", "").replace("+", "").strip()
                 num = utils.to_number(cleaned)
-                if num is not None:
-                    data[field] = num
             else:
                 num = utils.to_number(raw_val)
-                if num is not None:
-                    data[field] = num
-
-    # Also try harvesting from key-value pair divs (SA uses both)
-    pairs = _harvest_label_value_pairs(soup)
-    for label, raw_val in pairs:
-        field = _SA_MAP.get(label.lower().strip())
-        if not field or field in data:
-            continue
-        if field in _PCT_FIELDS:
-            cleaned = raw_val.replace("%", "").replace("+", "").strip()
-            num = utils.to_number(cleaned)
-        else:
-            num = utils.to_number(raw_val)
-        if num is not None:
-            data[field] = num
+            if num is not None:
+                data[field] = num
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [SA] parse error for {symbol}: {exc}")
+        return {}
 
     # --- Also fetch dividend history page for per-year totals ---
     div_url = _SA_DIV_URL.format(symbol=symbol)
-    div_html = utils.fetch(div_url, session=session)
-    if div_html:
-        div_soup = BeautifulSoup(div_html, "lxml")
-        yearly_divs: Dict[int, float] = {}
-        for table in div_soup.find_all("table"):
-            for row in table.find_all("tr"):
-                cells = row.find_all("td")
-                if len(cells) < 2:
-                    continue
-                date_str = _text(cells[0])  # e.g. "Apr 28, 2026"
-                amount_str = _text(cells[1])  # e.g. "6.000 PKR"
-                # Extract year from date
-                yr_match = re.search(r"20\d{2}", date_str)
-                if not yr_match:
-                    continue
-                year = int(yr_match.group())
-                # Extract amount (strip currency)
-                amt_match = re.search(r"[\d,.]+", amount_str)
-                if not amt_match:
-                    continue
-                try:
-                    amt = float(amt_match.group().replace(",", ""))
-                except ValueError:
-                    continue
-                if amt > 0:
-                    yearly_divs[year] = yearly_divs.get(year, 0.0) + amt
-        if yearly_divs:
-            data["dividend_by_year"] = yearly_divs
+    try:
+        div_html = utils.fetch(div_url, session=session)
+        if div_html:
+            div_soup = BeautifulSoup(div_html, "lxml")
+            yearly_divs: Dict[int, float] = {}
+            for table in div_soup.find_all("table"):
+                for row in table.find_all("tr"):
+                    cells = row.find_all("td")
+                    if len(cells) < 2:
+                        continue
+                    date_str = _text(cells[0])    # e.g. "Apr 28, 2026"
+                    amount_str = _text(cells[1])  # e.g. "6.000 PKR"
+                    yr_match = re.search(r"20\d{2}", date_str)
+                    if not yr_match:
+                        continue
+                    year = int(yr_match.group())
+                    amt_match = re.search(r"[\d,.]+", amount_str)
+                    if not amt_match:
+                        continue
+                    try:
+                        amt = float(amt_match.group().replace(",", ""))
+                    except ValueError:
+                        continue
+                    if amt > 0:
+                        yearly_divs[year] = yearly_divs.get(year, 0.0) + amt
+            if yearly_divs:
+                data["dividend_by_year"] = yearly_divs
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [SA] dividend parse error for {symbol}: {exc}")
 
     if data:
         data["_source"] = "stockanalysis.com"
+        n = len([k for k in data if not k.startswith("_")])
+        print(f"  [SA] OK {symbol}: parsed {n} fields "
+              f"(CR={data.get('current_ratio')}, ROE={data.get('roe_pct')}, "
+              f"D/E={data.get('debt_to_equity')})")
+    else:
+        print(f"  [SA] {symbol}: page fetched but 0 fields parsed "
+              f"(structure may have changed)")
     return data
 
 
@@ -702,6 +726,41 @@ def _merge_secondary_data(financials: List[Dict], profile: Dict,
     ]:
         if sa_key in sa_data and not profile.get(profile_key):
             profile[profile_key] = sa_data[sa_key]
+
+    # --- Market cap fallback: shares × price (when PSX didn't give cap) ---
+    if not profile.get("market_cap"):
+        shares = sa_data.get("shares")
+        price = profile.get("price")
+        if shares and price and shares > 0 and price > 0:
+            profile["market_cap"] = shares * price
+            profile["_market_cap_source"] = "shares × price (StockAnalysis)"
+
+    # --- When PSX gave us NO financial records (e.g. 502 outage), build one
+    #     from StockAnalysis so its real numbers aren't discarded. ---
+    if not financials:
+        sa_year = None
+        # Try to infer the fiscal year from any SA field; else use current year
+        from datetime import datetime as _dt
+        sa_year = _dt.now().year
+        synth = {"year": sa_year, "_sources": {}, "_synthesized": True}
+        for sa_key, fin_key in [
+            ("revenue", "revenue"),
+            ("net_profit", "net_profit"),
+            ("eps", "eps"),
+            ("total_equity", "total_equity"),
+            ("total_debt", "total_debt"),
+            ("operating_cashflow", "operating_cashflow"),
+        ]:
+            if sa_data.get(sa_key) is not None:
+                synth[fin_key] = sa_data[sa_key]
+                synth["_sources"][fin_key] = "StockAnalysis (S&P Global)"
+        # Only add the record if SA actually gave us something substantive
+        if any(k in synth for k in
+               ("revenue", "net_profit", "total_equity", "operating_cashflow")):
+            financials.append(synth)
+            warnings.append(
+                "PSX financial tables unavailable — figures sourced from "
+                "StockAnalysis.com (S&P Global).")
 
     if not financials:
         return
