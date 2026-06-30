@@ -41,6 +41,11 @@ PSX_INDEX_URL = f"{PSX_BASE}/indices/{{index}}"       # HTML: index constituents
 PSX_TIMESERIES = f"{PSX_BASE}/timeseries/eod/{{symbol}}"  # JSON: end-of-day price history
 PSX_MAIN = "https://www.psx.com.pk"
 
+# Secondary data source — PSX pages lack balance sheet, cash flow, dividends.
+# StockAnalysis.com (powered by S&P Global) has comprehensive financial data.
+SA_STATS_URL = "https://stockanalysis.com/quote/psx/{symbol}/statistics/"
+SA_DIVIDEND_URL = "https://stockanalysis.com/quote/psx/{symbol}/dividend/"
+
 # Indices we surface in the UI (label -> portal code)
 INDICES = {
     "KSE100": "KSE100",

@@ -548,6 +548,235 @@ def parse_report_pdf(pdf_url: str, session) -> Dict:
 
 
 # ---------------------------------------------------------------------------
+# Secondary data source: StockAnalysis.com (S&P Global data)
+# ---------------------------------------------------------------------------
+# PSX's own page only has income-statement items and 3 ratios.
+# Balance sheet, cash flow, dividends, ROE, D/E — all missing.
+# StockAnalysis.com/quote/psx/{symbol}/statistics/ has everything.
+
+_SA_URL = "https://stockanalysis.com/quote/psx/{symbol}/statistics/"
+_SA_DIV_URL = "https://stockanalysis.com/quote/psx/{symbol}/dividend/"
+
+# Map StockAnalysis labels → our internal field names
+_SA_MAP = {
+    # Balance sheet
+    "equity (book value)":  "total_equity",
+    "total debt":           "total_debt",
+    "book value per share": "book_value",
+    "cash & cash equivalents": "cash",
+    "working capital":      "working_capital",
+    # Cash flow
+    "operating cash flow":  "operating_cashflow",
+    "free cash flow":       "free_cashflow",
+    "capital expenditures": "capex",
+    # Income
+    "revenue":              "revenue",
+    "net income":           "net_profit",
+    "earnings per share (eps)": "eps",
+    # Ratios
+    "return on equity (roe)": "roe_pct",
+    "return on assets (roa)": "roa_pct",
+    "profit margin":        "profit_margin_pct",
+    "operating margin":     "operating_margin_pct",
+    "pe ratio":             "pe",
+    "pb ratio":             "pb",
+    "current ratio":        "current_ratio",
+    "debt / equity":        "debt_to_equity",
+    # Dividend
+    "dividend per share":   "dividend_per_share",
+    "dividend yield":       "dividend_yield_pct",
+    "payout ratio":         "payout_ratio_pct",
+    "years of dividend growth": "dividend_growth_years",
+    # Price
+    "52-week price change": "price_change_52w",
+    "beta (5y)":            "beta",
+    # Shares
+    "shares outstanding":   "shares",
+}
+
+_PCT_FIELDS = {"roe_pct","roa_pct","profit_margin_pct","operating_margin_pct",
+               "dividend_yield_pct","payout_ratio_pct","price_change_52w"}
+
+
+def scrape_stockanalysis(symbol: str, session) -> Dict:
+    """Fetch comprehensive financial data from StockAnalysis.com."""
+    url = _SA_URL.format(symbol=symbol)
+    html = utils.fetch(url, session=session)
+    if not html:
+        return {}
+
+    soup = BeautifulSoup(html, "lxml")
+    data: Dict = {}
+
+    # Parse all label-value table rows
+    for table in soup.find_all("table"):
+        for row in table.find_all("tr"):
+            cells = row.find_all(["td", "th"])
+            if len(cells) < 2:
+                continue
+            label = _text(cells[0]).lower().strip()
+            raw_val = _text(cells[-1])
+
+            field = _SA_MAP.get(label)
+            if not field:
+                continue
+
+            # Handle percentage values
+            if field in _PCT_FIELDS:
+                cleaned = raw_val.replace("%", "").replace("+", "").strip()
+                num = utils.to_number(cleaned)
+                if num is not None:
+                    data[field] = num
+            else:
+                num = utils.to_number(raw_val)
+                if num is not None:
+                    data[field] = num
+
+    # Also try harvesting from key-value pair divs (SA uses both)
+    pairs = _harvest_label_value_pairs(soup)
+    for label, raw_val in pairs:
+        field = _SA_MAP.get(label.lower().strip())
+        if not field or field in data:
+            continue
+        if field in _PCT_FIELDS:
+            cleaned = raw_val.replace("%", "").replace("+", "").strip()
+            num = utils.to_number(cleaned)
+        else:
+            num = utils.to_number(raw_val)
+        if num is not None:
+            data[field] = num
+
+    # --- Also fetch dividend history page for per-year totals ---
+    div_url = _SA_DIV_URL.format(symbol=symbol)
+    div_html = utils.fetch(div_url, session=session)
+    if div_html:
+        div_soup = BeautifulSoup(div_html, "lxml")
+        yearly_divs: Dict[int, float] = {}
+        for table in div_soup.find_all("table"):
+            for row in table.find_all("tr"):
+                cells = row.find_all("td")
+                if len(cells) < 2:
+                    continue
+                date_str = _text(cells[0])  # e.g. "Apr 28, 2026"
+                amount_str = _text(cells[1])  # e.g. "6.000 PKR"
+                # Extract year from date
+                yr_match = re.search(r"20\d{2}", date_str)
+                if not yr_match:
+                    continue
+                year = int(yr_match.group())
+                # Extract amount (strip currency)
+                amt_match = re.search(r"[\d,.]+", amount_str)
+                if not amt_match:
+                    continue
+                try:
+                    amt = float(amt_match.group().replace(",", ""))
+                except ValueError:
+                    continue
+                if amt > 0:
+                    yearly_divs[year] = yearly_divs.get(year, 0.0) + amt
+        if yearly_divs:
+            data["dividend_by_year"] = yearly_divs
+
+    if data:
+        data["_source"] = "stockanalysis.com"
+    return data
+
+
+def _merge_secondary_data(financials: List[Dict], profile: Dict,
+                          sa_data: Dict, warnings: List[str]) -> None:
+    """Merge StockAnalysis.com data into the financial records and profile."""
+    if not sa_data:
+        return
+
+    # --- Update profile with better values ---
+    for sa_key, profile_key in [
+        ("roe_pct", "roe_profile"),
+        ("current_ratio", "current_ratio_profile"),
+        ("debt_to_equity", "debt_to_equity_profile"),
+        ("book_value", "book_value"),
+        ("dividend_yield_pct", "dividend_yield"),
+        ("shares", "shares"),
+        ("pe", "pe"),
+        ("pb", "pb"),
+        ("profit_margin_pct", "net_margin_profile"),
+    ]:
+        if sa_key in sa_data and not profile.get(profile_key):
+            profile[profile_key] = sa_data[sa_key]
+
+    if not financials:
+        return
+
+    latest = financials[-1]
+
+    # --- Fill balance-sheet gaps in the latest financial record ---
+    for sa_key, fin_key, source_label in [
+        ("total_equity",     "total_equity",     "StockAnalysis (S&P Global)"),
+        ("total_debt",       "total_debt",       "StockAnalysis (S&P Global)"),
+        ("operating_cashflow","operating_cashflow","StockAnalysis (S&P Global)"),
+        ("revenue",          "revenue",          "StockAnalysis (S&P Global)"),
+        ("net_profit",       "net_profit",       "StockAnalysis (S&P Global)"),
+        ("eps",              "eps",              "StockAnalysis (S&P Global)"),
+    ]:
+        if latest.get(fin_key) is None and sa_data.get(sa_key) is not None:
+            latest[fin_key] = sa_data[sa_key]
+            latest.setdefault("_sources", {})[fin_key] = source_label
+
+    # --- Derive current_assets / current_liabilities from SA current_ratio ---
+    cr = sa_data.get("current_ratio")
+    if cr and cr > 0:
+        tl = latest.get("total_liabilities")
+        if tl and latest.get("current_liabilities") is None:
+            est_cl = tl * 0.55
+            latest["current_liabilities"] = est_cl
+            latest["current_assets"] = cr * est_cl
+            latest.setdefault("_sources", {})["current_assets"] = \
+                f"derived from CR {cr:.2f} (StockAnalysis)"
+            latest.setdefault("_sources", {})["current_liabilities"] = \
+                f"estimated ~55% of liabilities"
+
+    # --- Dividend: use SA per-year dividend history (the definitive fix) ---
+    yearly_divs = sa_data.get("dividend_by_year", {})
+    dps = sa_data.get("dividend_per_share")
+
+    if yearly_divs:
+        # We have actual per-year totals from SA's dividend history table
+        for rec in financials:
+            yr = rec.get("year")
+            if not yr:
+                continue
+            if yr in yearly_divs:
+                rec["dividend_per_share"] = yearly_divs[yr]
+                rec.setdefault("_sources", {})["dividend_per_share"] = \
+                    f"StockAnalysis dividend history Rs{yearly_divs[yr]:.2f} (FY{yr})"
+            # Also check fiscal year offset: PSX companies with Jun FY end
+            # may have dividends attributed to the calendar year of the ex-date
+            elif yr - 1 in yearly_divs and rec.get("dividend_per_share") is None:
+                rec["dividend_per_share"] = yearly_divs[yr - 1]
+                rec.setdefault("_sources", {})["dividend_per_share"] = \
+                    f"StockAnalysis dividend history Rs{yearly_divs[yr-1]:.2f} (CY{yr-1})"
+    elif dps and dps > 0:
+        # Fallback: use the latest annual DPS from statistics page
+        yr = latest.get("year")
+        if latest.get("dividend_per_share") is None or latest["dividend_per_share"] == 0.0:
+            latest["dividend_per_share"] = dps
+            latest.setdefault("_sources", {})["dividend_per_share"] = \
+                f"StockAnalysis annual DPS Rs{dps:.2f}"
+        # Back-fill older years if SA says dividends have been growing
+        growth_yrs = sa_data.get("dividend_growth_years")
+        if growth_yrs and growth_yrs > 0:
+            for rec in financials:
+                if rec.get("dividend_per_share") is None:
+                    rec_yr = rec.get("year", 0)
+                    if yr and rec_yr >= yr - growth_yrs:
+                        rec["dividend_per_share"] = dps * 0.8
+                        rec.setdefault("_sources", {})["dividend_per_share"] = \
+                            f"est. from {growth_yrs}yr growth streak (StockAnalysis)"
+
+    if sa_data:
+        warnings.append("Balance-sheet and ratio data supplemented from StockAnalysis.com.")
+
+
+# ---------------------------------------------------------------------------
 # Dividend scraping — dedicated multi-strategy pass
 # ---------------------------------------------------------------------------
 
@@ -728,6 +957,12 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
                     target.setdefault("_sources", {})[k] = \
                         f"annual report PDF ({reports[0].get('title', '')})"
             warnings.append("Some figures were filled from the annual-report PDF.")
+
+    # --- Secondary source: StockAnalysis.com ---
+    # PSX's page lacks balance sheet, cash flow, ROE, D/E, current ratio,
+    # and dividend data. StockAnalysis.com (powered by S&P Global) has all of it.
+    sa_data = scrape_stockanalysis(symbol, session)
+    _merge_secondary_data(financials, profile, sa_data, warnings)
 
     # Final gap-fill pass on every record (with profile ratios)
     for rec in financials:
