@@ -216,6 +216,27 @@ html[data-theme="light"] .modal-overlay{background:rgba(20,40,80,.28)}
 .stat{background:var(--bg-2);border:1px solid var(--border);border-radius:13px;padding:13px 14px}
 .stat .s-k{font:600 10px 'Inter';letter-spacing:.6px;text-transform:uppercase;color:var(--faint)}
 .stat .s-v{font:700 19px 'JetBrains Mono';margin-top:5px}
+/* min/max price cards with range tabs */
+.mm-range-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px}
+.mm-rt{font:600 11px 'Inter';letter-spacing:.2px;color:var(--muted);
+  background:var(--bg-2);border:1px solid var(--border);border-radius:8px;
+  padding:5px 11px;cursor:pointer;transition:all .16s ease;white-space:nowrap}
+.mm-rt:hover{border-color:var(--border-strong);color:var(--text)}
+.mm-rt.active{background:var(--bull-dim);border-color:var(--bull);color:var(--bull)}
+.mm-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.mm-card{background:var(--bg-2);border:1px solid var(--border);border-radius:13px;
+  padding:13px 14px;position:relative;overflow:hidden}
+.mm-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.mm-low::before{background:var(--bear)}
+.mm-high::before{background:var(--bull)}
+.mm-k{font:600 10px 'Inter';letter-spacing:.6px;text-transform:uppercase;color:var(--faint);
+  display:flex;align-items:center;gap:5px}
+.mm-low .mm-k svg{color:var(--bear)}
+.mm-high .mm-k svg{color:var(--bull)}
+.mm-v{font:700 19px 'JetBrains Mono';margin-top:6px}
+.mm-low .mm-v{color:var(--bear)}
+.mm-high .mm-v{color:var(--bull)}
+.mm-when{font:500 11px 'Inter';color:var(--muted);margin-top:3px}
 .dq{margin-top:2px}
 .dq-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
 .dq-top .k{font:600 11px 'Inter';letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
@@ -446,10 +467,24 @@ html[data-theme="light"] .loader{background:rgba(238,242,248,.82)}
           <div class="price"><span class="cur">₨</span><span id="co-price">0.00</span></div>
           <div class="change" id="co-change">—</div>
         </div>
-        <div class="stat-grid">
-          <div class="stat"><div class="s-k">Market Cap</div><div class="s-v" id="st-mcap">—</div></div>
-          <div class="stat"><div class="s-k">P / E Ratio</div><div class="s-v" id="st-pe">—</div></div>
-          <div class="stat"><div class="s-k">Coverage</div><div class="s-v" id="st-cov">—</div></div>
+        <div class="mm-range-tabs" id="mm-range-tabs">
+          <button class="mm-rt" data-range="1d">1 day</button>
+          <button class="mm-rt" data-range="1w">1 week</button>
+          <button class="mm-rt active" data-range="1m">1 month</button>
+          <button class="mm-rt" data-range="6m">6 months</button>
+          <button class="mm-rt" data-range="1y">1 year</button>
+        </div>
+        <div class="mm-grid">
+          <div class="mm-card mm-low">
+            <div class="mm-k"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l6 6 4-4 8 8"/><path d="M21 17v-5h-5"/></svg> Minimum Price</div>
+            <div class="mm-v" id="mm-low-v">—</div>
+            <div class="mm-when" id="mm-low-when"></div>
+          </div>
+          <div class="mm-card mm-high">
+            <div class="mm-k"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/></svg> Maximum Price</div>
+            <div class="mm-v" id="mm-high-v">—</div>
+            <div class="mm-when" id="mm-high-when"></div>
+          </div>
         </div>
         <div class="dq">
           <div class="dq-top"><span class="k">Data Confidence
@@ -563,6 +598,73 @@ const fmtMoney = (n)=>{ if(n==null||isNaN(n))return '—';
   if(a>=1e3)return (n/1e3).toFixed(1)+' K';
   return n.toFixed(0); };
 const fmtPx = (n)=> n==null||isNaN(n) ? '—' : n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+/* ---- min/max price card state + helpers ---- */
+let _mmPriceHistory = [];
+let currentRange = '1m';
+const RANGE_DAYS = { '1d':1, '1w':7, '1m':30, '6m':182, '1y':365 };
+const RANGE_LABEL = { '1d':'1 day', '1w':'1 week', '1m':'1 month', '6m':'6 months', '1y':'1 year' };
+
+function _fmtDate(d){
+  // d is a Date — returns e.g. "14 Jun 2026"
+  return d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+}
+function _sliceByRange(ph, range){
+  if(!ph || !ph.length) return [];
+  const days = RANGE_DAYS[range] || 30;
+  const last = new Date(ph[ph.length-1].date);
+  const cutoff = new Date(last);
+  cutoff.setDate(cutoff.getDate() - days);
+  const within = ph.filter(pt => new Date(pt.date) >= cutoff);
+  // Always keep at least the last point so 1-day ranges still show something
+  return within.length ? within : ph.slice(-1);
+}
+function _rangeWhenLabel(slice, range){
+  // Describe the period covered: a single day, or a date range
+  if(!slice.length) return '';
+  const first = new Date(slice[0].date);
+  const last  = new Date(slice[slice.length-1].date);
+  if(range === '1d' || slice.length === 1){
+    return _fmtDate(last);
+  }
+  return `${_fmtDate(first)} → ${_fmtDate(last)}`;
+}
+function renderMinMax(range){
+  currentRange = range;
+  // reflect active tab
+  document.querySelectorAll('#mm-range-tabs .mm-rt').forEach(b=>{
+    b.classList.toggle('active', b.dataset.range === range);
+  });
+  const slice = _sliceByRange(_mmPriceHistory, range);
+  const lowV=$('mm-low-v'), highV=$('mm-high-v'),
+        lowW=$('mm-low-when'), highW=$('mm-high-when');
+  if(!slice.length){
+    lowV.textContent='—'; highV.textContent='—';
+    lowW.textContent=''; highW.textContent='';
+    return;
+  }
+  let lo=slice[0], hi=slice[0];
+  for(const pt of slice){
+    if(pt.close < lo.close) lo=pt;
+    if(pt.close > hi.close) hi=pt;
+  }
+  const period = _rangeWhenLabel(slice, range);
+  lowV.textContent = '₨ '+fmtPx(lo.close);
+  highV.textContent = '₨ '+fmtPx(hi.close);
+  // show the specific day the low/high occurred, plus the period context
+  lowW.textContent  = `${_fmtDate(new Date(lo.date))} · ${RANGE_LABEL[range]}`;
+  highW.textContent = `${_fmtDate(new Date(hi.date))} · ${RANGE_LABEL[range]}`;
+}
+// wire the range tabs once
+document.addEventListener('DOMContentLoaded', ()=>{
+  const tabs = document.getElementById('mm-range-tabs');
+  if(tabs){
+    tabs.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.mm-rt');
+      if(btn && btn.dataset.range){ renderMinMax(btn.dataset.range); }
+    });
+  }
+});
 
 /* ---------- DEMO DATA + STATE ---------- */
 let BUNDLE = {};
@@ -838,10 +940,9 @@ function renderResult(d){
   if(cv==null||isNaN(cv)){ch.textContent='—';ch.className='change';}
   else{const up=cv>=0;ch.className='change '+(up?'up':'dn');
     ch.innerHTML=`${up?'▲':'▼'} ${Math.abs(cv).toFixed(2)}%`;}
-  // stats
-  $('st-mcap').textContent='₨ '+fmtMoney(p.market_cap);
-  $('st-pe').textContent=(p.pe!=null&&!isNaN(p.pe))?Number(p.pe).toFixed(1):'—';
-  $('st-cov').textContent=Math.round((d.coverage||0)*100)+'%';
+  // min/max price over selected range (replaces market cap / PE / coverage)
+  _mmPriceHistory = ph;
+  renderMinMax(currentRange);
   // data quality — single confidence location (company card)
   const dq=Math.round((d.data_quality||0)*100);
   $('dq-val').textContent=dq+'%';
