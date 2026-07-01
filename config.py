@@ -84,26 +84,24 @@ ANALYSIS_TTL_MINUTES = 30     # re-scrape a company if its analysis is older tha
 # structural for them.
 # -----------------------------------------------------------------------------
 WEIGHTS_GENERAL = {
-    "revenue_growth":   1/9,
-    "profit_margin":    1/9,
-    "eps_growth":       1/9,
-    "debt_to_equity":   1/9,
-    "roe":              1/9,
-    "current_ratio":    1/9,
-    "cashflow_quality": 1/9,
-    "dividend":         1/9,
-    "price_trend":      1/9,
-}
-
-WEIGHTS_BANKING = {
     "revenue_growth":   1/8,
     "profit_margin":    1/8,
     "eps_growth":       1/8,
+    "debt_to_equity":   1/8,
     "roe":              1/8,
-    "capital_adequacy": 1/8,
+    "current_ratio":    1/8,
     "cashflow_quality": 1/8,
     "dividend":         1/8,
-    "price_trend":      1/8,
+}
+
+WEIGHTS_BANKING = {
+    "revenue_growth":   1/7,
+    "profit_margin":    1/7,
+    "eps_growth":       1/7,
+    "roe":              1/7,
+    "capital_adequacy": 1/7,
+    "cashflow_quality": 1/7,
+    "dividend":         1/7,
 }
 
 # Sectors that should use the banking / financial model.
