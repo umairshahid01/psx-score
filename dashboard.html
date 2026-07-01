@@ -115,6 +115,8 @@ body{
 .opt:last-child{border-bottom:0}
 .opt:hover,.opt.active{background:var(--bull-dim)}
 .opt .o-sym{font:700 14px 'JetBrains Mono';color:var(--text)}
+.opt .o-ico{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;
+  background:var(--bull-dim);color:var(--bull);flex-shrink:0}
 .opt .o-name{font:500 12px 'Inter';color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:230px}
 .opt .o-tag{font:600 10px 'JetBrains Mono';color:var(--gold);background:var(--gold-dim);padding:3px 7px;border-radius:6px;flex-shrink:0}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
@@ -206,7 +208,11 @@ html[data-theme="light"] .modal-overlay{background:rgba(20,40,80,.28)}
 .co-name{font:700 26px 'Space Grotesk';letter-spacing:-.6px;line-height:1.1}
 .co-symbol{font:700 14px 'JetBrains Mono';color:var(--bull);margin-top:4px}
 .sector-badge{font:600 11px 'Inter';color:var(--muted);background:var(--bg-2);border:1px solid var(--border);
-  padding:6px 12px;border-radius:9px;letter-spacing:.3px;max-width:240px;text-align:right}
+  padding:6px 12px;border-radius:9px;letter-spacing:.3px;max-width:280px;
+  display:inline-flex;align-items:center;gap:7px;text-transform:uppercase}
+.sector-badge .sec-ico{flex-shrink:0;color:var(--bull);transition:transform .3s ease}
+.sector-badge:hover .sec-ico{transform:scale(1.12) rotate(-4deg)}
+.sector-badge span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .price-row{display:flex;align-items:baseline;gap:12px}
 .price{font:700 32px 'JetBrains Mono';letter-spacing:-1px}
 .price .cur{font-size:16px;color:var(--muted);font-weight:500}
@@ -358,11 +364,52 @@ html[data-theme="light"] .loader{background:rgba(238,242,248,.82)}
   .btn-analyze{width:100%;justify-content:center}
 }
 /* ============================ REDUCED MOTION ============================ */
+/* ==================== BEAUTIFICATION (v2, additive) ==================== */
+/* metric rows rise in with a stagger when results render */
+@keyframes metricIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.metric.reveal{animation:metricIn .5s cubic-bezier(.2,.7,.3,1) both}
+/* the score-metric icon gets a soft pulse in its status color */
+@keyframes icoPulse{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 0 4px var(--pulse-col)}}
+.m-ico.good{--pulse-col:rgba(0,229,160,.10)}
+.m-ico.warn{--pulse-col:rgba(255,166,43,.10)}
+.m-ico.bad{--pulse-col:rgba(255,77,109,.10)}
+.metric:hover .m-ico{animation:icoPulse 1.6s ease-in-out infinite}
+.metric:hover .m-ico .sec-ico,.metric:hover .m-ico svg{transform:scale(1.08)}
+.m-ico svg{transition:transform .25s ease}
+/* min/max cards: lift + accent-bar grow on hover, sheen on the high card */
+.mm-card{transition:transform .22s cubic-bezier(.2,.7,.3,1),border-color .22s ease,box-shadow .22s ease}
+.mm-card:hover{transform:translateY(-3px);border-color:var(--border-strong);
+  box-shadow:0 12px 26px -14px rgba(0,0,0,.55)}
+.mm-card::before{transition:width .22s ease}
+.mm-card:hover::before{width:5px}
+.mm-high::after{content:'';position:absolute;top:0;left:-60%;width:40%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(0,229,160,.10),transparent);
+  transform:skewX(-18deg);pointer-events:none}
+.mm-high:hover::after{animation:mmSheen 1s ease}
+@keyframes mmSheen{from{left:-60%}to{left:130%}}
+/* range tab press feedback */
+.mm-rt:active{transform:scale(.95)}
+/* gauge: a gentle breathing glow behind the dial, tinted by verdict color */
+.gauge-wrap::after{content:'';position:absolute;inset:12% 12% 20% 12%;border-radius:50%;
+  background:radial-gradient(circle,var(--gauge-glow,rgba(0,229,160,.14)),transparent 68%);
+  z-index:0;pointer-events:none;animation:gaugeBreathe 4.5s ease-in-out infinite}
+@keyframes gaugeBreathe{0%,100%{opacity:.5;transform:scale(.96)}50%{opacity:1;transform:scale(1.02)}}
+#gauge-svg,.gauge-center{position:relative;z-index:1}
+/* sector badge icon idle shimmer on the profile card */
+@keyframes secGlow{0%,100%{opacity:.85}50%{opacity:1}}
+.sector-badge .sec-ico{animation:secGlow 3s ease-in-out infinite}
+/* panels gain a subtle hover lift (company + score cards feel alive) */
+.stage .panel{transition:transform .3s cubic-bezier(.2,.7,.3,1),box-shadow .3s ease}
+/* verdict label a touch of glow */
+.score-of{transition:color .4s ease}
 @media(prefers-reduced-motion:reduce){
-  *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
-  .tape-track{animation:none;padding-left:0}
-  #bg-grid{animation:none}
+  .metric.reveal{animation:none}
+  .metric:hover .m-ico{animation:none}
+  .gauge-wrap::after{animation:none}
+  .sector-badge .sec-ico{animation:none}
+  .mm-high:hover::after{animation:none}
 }
+
 ::-webkit-scrollbar{width:10px;height:10px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:6px}
@@ -602,6 +649,21 @@ const fmtPx = (n)=> n==null||isNaN(n) ? '—' : n.toLocaleString('en-US',{minimu
 /* ---- min/max price card state + helpers ---- */
 let _mmPriceHistory = [];
 let currentRange = '1m';
+
+/* animated count-up for a rupee value into an element */
+function _countUpPx(el, target, dur){
+  if(el._raf) cancelAnimationFrame(el._raf);
+  if(REDUCED || target==null || isNaN(target)){
+    el.textContent = target==null||isNaN(target) ? '—' : '₨ '+fmtPx(target);
+    return;
+  }
+  const t0=performance.now(), ease=(t)=>1-Math.pow(1-t,3);
+  (function step(now){
+    const pr=Math.min(1,(now-t0)/(dur||650));
+    el.textContent='₨ '+fmtPx(target*ease(pr));
+    if(pr<1) el._raf=requestAnimationFrame(step);
+  })(t0);
+}
 const RANGE_DAYS = { '1d':1, '1w':7, '1m':30, '6m':182, '1y':365 };
 const RANGE_LABEL = { '1d':'1 day', '1w':'1 week', '1m':'1 month', '6m':'6 months', '1y':'1 year' };
 
@@ -657,8 +719,8 @@ function renderMinMax(range){
     if(pt.close > hi.close) hi=pt;
   }
   const period = _rangeWhenLabel(slice, range);
-  lowV.textContent = '₨ '+fmtPx(lo.close);
-  highV.textContent = '₨ '+fmtPx(hi.close);
+  _countUpPx(lowV, lo.close, 600);
+  _countUpPx(highV, hi.close, 600);
   // show the specific day the low/high occurred, plus the period context
   lowW.textContent  = `${_fmtDate(new Date(lo.date))} · ${RANGE_LABEL[range]}`;
   highW.textContent = `${_fmtDate(new Date(hi.date))} · ${RANGE_LABEL[range]}`;
@@ -700,6 +762,52 @@ const ICONS = {
 };
 const metricIcon = (k)=>ICONS[k]||'<circle cx="12" cy="12" r="8"/>';
 
+/* sector-specific icons — matched to PSX sector taxonomy.
+   Each is an inline stroke-path set drawn in a 24×24 viewBox. */
+const SECTOR_ICONS = {
+  oil:      '<path d="M12 2s6 6.5 6 11a6 6 0 01-12 0c0-4.5 6-11 6-11z"/>',                                    // droplet — oil & gas
+  bank:     '<path d="M3 10l9-6 9 6M4 10v9m16-9v9M8 10v9m8-9v9M3 21h18"/>',                                   // classical bank facade
+  cement:   '<path d="M3 9h18v11H3zM3 9l4-5h10l4 5M8 20v-6h8v6"/>',                                           // building block / silo
+  fertilizer:'<path d="M12 22V11M12 11c-3 0-5-2-5-5 3 0 5 2 5 5zM12 11c3 0 5-2 5-5-3 0-5 2-5 5z"/>',          // sprout / leaves
+  power:    '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',                                                          // lightning bolt
+  tech:     '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9zM9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/>', // microchip
+  food:     '<path d="M6 2v7a3 3 0 006 0V2M9 2v20M18 2c-1.5 1-2 3-2 6s.5 5 2 6v8"/>',                          // fork & spoon
+  textile:  '<path d="M4 4h16v4l-4 2 4 2v8H4v-8l4-2-4-2z"/>',                                                  // spool / weave
+  pharma:   '<path d="M10.5 3.5l10 10a4.95 4.95 0 01-7 7l-10-10a4.95 4.95 0 017-7zM7 7l10 10"/>',              // capsule
+  auto:     '<path d="M3 13l2-5a3 3 0 013-2h8a3 3 0 013 2l2 5v5h-3v-2H6v2H3zM6 15h.01M18 15h.01"/>',           // car
+  steel:    '<path d="M3 21l6-6M15 9l6-6M9 9L3 3m12 18l6-6M8 8l8 8"/>',                                        // girders / engineering
+  insurance:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',                // shield + check
+  paper:    '<path d="M7 3h7l5 5v13H7zM14 3v5h5"/>',                                                           // document
+  glass:    '<path d="M6 3h12l-1 8a5 5 0 01-10 0zM12 16v5M8 21h8"/>',                                          // glass / goblet
+  reit:     '<path d="M4 21V9l8-6 8 6v12M9 21v-6h6v6"/>',                                                      // house / property
+  default:  '<path d="M3 17l6-6 4 4 8-8M21 7v5h-5"/>',                                                         // generic uptrend
+};
+// map a PSX sector string → an icon key
+function sectorIconKey(sector){
+  const s=(sector||'').toUpperCase();
+  if(s.includes('OIL')||s.includes('GAS')) return 'oil';
+  if(s.includes('BANK')) return 'bank';
+  if(s.includes('CEMENT')) return 'cement';
+  if(s.includes('FERTILIZ')) return 'fertilizer';
+  if(s.includes('POWER')||s.includes('ELECTRIC')) return 'power';
+  if(s.includes('TECHNOLOG')||s.includes('COMMUNICATION')) return 'tech';
+  if(s.includes('FOOD')||s.includes('PERSONAL CARE')) return 'food';
+  if(s.includes('TEXTILE')) return 'textile';
+  if(s.includes('PHARMA')) return 'pharma';
+  if(s.includes('AUTOMOBILE')||s.includes('AUTO')) return 'auto';
+  if(s.includes('ENGINEER')||s.includes('STEEL')||s.includes('IRON')) return 'steel';
+  if(s.includes('INSURANCE')) return 'insurance';
+  if(s.includes('PAPER')||s.includes('BOARD')) return 'paper';
+  if(s.includes('GLASS')||s.includes('CERAMIC')) return 'glass';
+  if(s.includes('REAL ESTATE')||s.includes('REIT')) return 'reit';
+  return 'default';
+}
+function sectorIconSvg(sector,size){
+  const k=sectorIconKey(sector);
+  const sz=size||14;
+  return `<svg class="sec-ico" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${SECTOR_ICONS[k]||SECTOR_ICONS.default}</svg>`;
+}
+
 /* trend metric registry */
 const TREND_META = {
   revenue:{label:'Revenue',money:true,color:'--bull'},
@@ -730,6 +838,13 @@ function scoreColor(v){
   return getCSS('--bear');
 }
 const getCSS = (v)=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+/* translucent glow tint that matches the verdict band */
+function _glowFor(v){
+  if(v>=70) return 'rgba(0,229,160,.16)';   // bull
+  if(v>=55) return 'rgba(255,182,39,.16)';  // gold
+  if(v>=40) return 'rgba(255,166,43,.15)';  // amber
+  return 'rgba(255,77,109,.15)';            // bear
+}
 
 function buildGauge(svg, val, opts={}){
   const {cx,cy,r}=GA;
@@ -767,6 +882,9 @@ function buildGauge(svg, val, opts={}){
 function renderScore(val){
   const svg=$('gauge-svg'); if(!svg)return;
   const {valId,ndId,col,C}=buildGauge(svg,val);
+  // tint the breathing glow behind the dial to match the verdict color
+  const gw=svg.closest('.gauge-wrap');
+  if(gw){ gw.style.setProperty('--gauge-glow', _glowFor(val)); }
   const arc=$(valId); const total=arc.getTotalLength();
   arc.style.strokeDasharray=total;
   const el=$('gauge-score');
@@ -839,6 +957,7 @@ function renderDropdown(boxId,inputId,onPick){
   box.innerHTML=list.map(s=>{
     const demo = !LIVE && DEMO_SET.has(s.symbol);
     return `<div class="opt" data-sym="${s.symbol}">
+      <span class="o-ico">${sectorIconSvg(s.sector, 15)}</span>
       <span class="o-sym">${s.symbol}</span>
       <span class="o-name">${s.name||''}</span>
       ${demo?'<span class="o-tag">DEMO</span>':''}</div>`;
@@ -939,7 +1058,8 @@ function renderResult(d){
   const p=d.profile||{};
   $('co-name').textContent=p.name||d.symbol;
   $('co-symbol').textContent=d.symbol+(p.sector?'':'');
-  $('sector-badge').textContent=d.sector||p.sector||'—';
+  const _sec = d.sector||p.sector||'—';
+  $('sector-badge').innerHTML = sectorIconSvg(_sec, 13) + '<span>' + _sec + '</span>';
   // price — fall back to the latest close from history if the live price is missing
   const ph=d.price_history||[];
   let px=p.price;
@@ -1027,6 +1147,13 @@ function renderMetrics(d){
     if(REDUCED){f.style.width=pct+'%';return;}
     setTimeout(()=>{f.style.width=pct+'%';},120+i*90);
   });
+  // staggered row entrance
+  if(!REDUCED){
+    [...box.querySelectorAll('.metric')].forEach((row,i)=>{
+      row.style.animationDelay=(i*55)+'ms';
+      row.classList.add('reveal');
+    });
+  }
   // wire info buttons -> explainer modal
   [...box.querySelectorAll('.m-info')].forEach(b=>b.addEventListener('click',()=>openMetricModal(b.dataset.key)));
 }
