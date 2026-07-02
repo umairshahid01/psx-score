@@ -34,6 +34,7 @@ import utils
 import psx_data
 import scraper
 import scorer
+import predictor
 
 app = Flask(__name__)
 if CORS:
@@ -103,6 +104,45 @@ def analyze():
         return jsonify(_analyse(symbol))
     except Exception as exc:  # noqa: BLE001
         return jsonify({"error": f"Analysis failed: {exc}", "symbol": symbol}), 500
+
+
+# ---------------------------------------------------------------------------
+# Prediction (technical + fundamental outlook — guidance only, never advice)
+# ---------------------------------------------------------------------------
+_prediction_cache: Dict[str, tuple] = {}
+
+
+@app.route("/api/predict")
+def predict_route():
+    """
+    Scrape (or reuse the cached scrape), score fundamentals, then run the
+    Bulls-&-Bears-style prediction engine in predictor.py.  The dashboard
+    computes the identical analysis client-side from the /api/analyze payload,
+    so this endpoint mainly exists for API users and scripting.
+    """
+    symbol = request.args.get("symbol", "").strip().upper()
+    if not symbol:
+        return jsonify({"error": "Pass ?symbol=TICKER"}), 400
+    ttl = config.ANALYSIS_TTL_MINUTES * 60
+    with _cache_lock:
+        hit = _prediction_cache.get(symbol)
+        if hit and (time.time() - hit[0]) < ttl:
+            return jsonify(hit[1])
+    try:
+        scraped = scraper.scrape_company(symbol)
+        fundamental = scorer.score_company(scraped)
+        result = predictor.predict(scraped, fundamental)
+        result["fundamental"] = {
+            "score": fundamental.get("score"),
+            "verdict": fundamental.get("verdict"),
+            "highlights": fundamental.get("highlights"),
+            "concerns": fundamental.get("concerns"),
+        }
+        with _cache_lock:
+            _prediction_cache[symbol] = (time.time(), result)
+        return jsonify(result)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": f"Prediction failed: {exc}", "symbol": symbol}), 500
 
 
 

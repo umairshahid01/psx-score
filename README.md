@@ -29,6 +29,18 @@ price prediction and not investment advice.*
 - **Visual everything.** Animated health gauge, staggered metric bars, multi-year trend
   charts (1Y / 3Y / 5Y / 10Y), price sparkline.
   Full **light & dark mode**.
+- **NEW — Prediction tab.** A second **Prediction** button next to Analyze runs a
+  rules-based outlook engine modelled on how seasoned PSX analysts read a chart:
+  trend structure (higher-highs / higher-lows), **EMA-21 / EMA-89 / 200-MA** as dynamic
+  supports, **support & resistance clusters**, **Fibonacci retracement** of the last
+  rally, **RSI(14) divergence**, **volumes**, and a defined **Buy-1 / Buy-2 /
+  Stop-loss / Target** trade plan with a reward-vs-risk ratio and a 2–3% portfolio-risk
+  sizing reminder. Results are shown with a **candlestick chart** (EMA overlays,
+  floors/ceilings, Fib levels, plan markers, RSI panel with divergence lines) and a set
+  of plain-English "explain it like I'm 5" story cards, with the **final verdict — and
+  its disclaimer — pinned at the top of the page**.
+  ⚠️ *The prediction is educational guidance only. It is **not** a purchase or sell
+  call, and never financial advice.*
 
 > **DEMO vs LIVE** — open `dashboard.html` on its own and it runs in **DEMO** mode with a
 > few bundled sample companies so you can see exactly how it looks and behaves. Launch it
@@ -66,6 +78,7 @@ push an update, everyone who runs the `.bat` gets it automatically.
 | `psx_data.py`    | Builds & caches the live PSX stock universe (the auto-updating list). |
 | `scraper.py`     | Scrapes a company's profile, financial tables, price history, and report PDFs. |
 | `scorer.py`      | Pure scoring logic (no network): turns scraped data into the 0–100 score. |
+| `predictor.py`   | Prediction engine (no network): trend structure, EMAs, S/R, Fibonacci, RSI divergence, trade plan. Mirrored in JS inside the dashboard so DEMO mode behaves identically. |
 | `utils.py`       | Shared helpers: HTTP session, robust number parsing, caching. |
 | `config.py`      | All settings: ports, PSX endpoints, scoring weights, your GitHub details. |
 | `requirements.txt` | Python dependencies. |

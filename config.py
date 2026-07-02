@@ -122,3 +122,21 @@ VERDICTS = [
 
 # Trend windows offered in the UI (years).
 TREND_WINDOWS = [1, 3, 5, 10]
+
+# -----------------------------------------------------------------------------
+# Prediction engine (see predictor.py — methodology modelled on how seasoned
+# PSX analysts read charts: trend structure, EMA 21/89 + 200-MA, RSI(14)
+# divergence, support/resistance clusters, Fibonacci retracement of the last
+# rally, volumes, and a defined Buy-1/Buy-2/Stop/Target trade plan).
+# Guidance only — never a buy/sell call.
+# -----------------------------------------------------------------------------
+PREDICTOR = {
+    "ema_fast": 21,          # daily EMA used as trailing/dynamic support
+    "ema_slow": 89,          # trend arbiter — trend alive while price sustains it
+    "sma_long": 200,         # long-term moving average
+    "rsi_period": 14,
+    "fib_ratios": [0.236, 0.382, 0.5, 0.618],
+    "tech_weight": 0.55,     # blend of technical vs fundamental score
+    "fund_weight": 0.45,
+    "portfolio_risk_pct": "2–3%",   # position-sizing reminder from the show
+}

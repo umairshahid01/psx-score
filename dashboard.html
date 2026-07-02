@@ -429,6 +429,81 @@ html[data-theme="light"] .loader{background:rgba(238,242,248,.82)}
 .km-src-date{font:500 11.5px 'Inter';color:var(--faint);line-height:1.45}
 /* ---- single confidence note below bar ---- */
 .dq-note{font:500 11px 'Inter';color:var(--faint);margin-top:7px;line-height:1.4}
+/* ======================= PREDICTION TAB (v3) ======================= */
+.btn-predict{flex:0 0 auto;padding:15px 26px;border-radius:13px;border:none;cursor:pointer;position:relative;overflow:hidden;
+  display:inline-flex;align-items:center;gap:9px;font-family:inherit;font-weight:800;font-size:15px;color:#1a1205;
+  background:linear-gradient(135deg,var(--gold) 0%,#ffd76a 100%);box-shadow:0 8px 22px rgba(255,182,39,.28);
+  transition:transform .15s ease}
+.btn-predict:hover{transform:translateY(-2px)}
+.btn-predict:active{transform:translateY(0)}
+.btn-predict:disabled{opacity:.55;cursor:not-allowed;transform:none}
+#pstage{display:none}
+#pstage.show{display:block;animation:metricIn .5s cubic-bezier(.2,.7,.3,1) both}
+.pv-banner{border-radius:18px;padding:26px 26px 20px;position:relative;overflow:hidden;margin-bottom:14px;
+  background:var(--bg-2);border:1px solid var(--border-strong)}
+.pv-banner::before{content:"";position:absolute;inset:0;opacity:.16;pointer-events:none;background:
+  radial-gradient(600px 220px at 12% 0%,var(--pv-glow,#8794AE),transparent 60%)}
+.pv-banner.strong_bullish,.pv-banner.bullish_dips{--pv-glow:var(--bull)}
+.pv-banner.sideways{--pv-glow:var(--gold)}
+.pv-banner.cautious,.pv-banner.bearish{--pv-glow:var(--bear)}
+.pv-top{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.pv-face{font-size:52px;line-height:1;filter:drop-shadow(0 4px 12px rgba(0,0,0,.25))}
+.pv-label{font-size:26px;font-weight:900;letter-spacing:.2px}
+.pv-blurb{margin-top:4px;color:var(--muted);max-width:640px;font-size:14.5px;line-height:1.5}
+.pv-scores{margin-left:auto;display:flex;gap:14px;flex-wrap:wrap}
+.pv-score{min-width:118px;background:var(--bg-1);border:1px solid var(--border);border-radius:13px;padding:10px 14px;text-align:center}
+.pv-score .k{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.pv-score .v{font-size:24px;font-weight:900;font-family:'JetBrains Mono',monospace}
+.pv-score .bar{height:5px;border-radius:4px;background:var(--border);margin-top:7px;overflow:hidden}
+.pv-score .bar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--bear),var(--gold),var(--bull));transition:width .9s cubic-bezier(.2,.7,.3,1)}
+.pv-disclaimer{margin-top:16px;display:flex;gap:10px;align-items:flex-start;border-radius:12px;padding:11px 14px;
+  background:var(--gold-dim);border:1px dashed var(--gold);color:var(--text);font-size:12.8px;line-height:1.5}
+.pv-disclaimer svg{flex:0 0 auto;margin-top:1px;color:var(--gold)}
+.eli5-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(295px,1fr));gap:13px;margin:14px 0}
+.eli5{background:var(--bg-2);border:1px solid var(--border);border-radius:15px;padding:16px 17px;position:relative}
+.eli5 .e-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.eli5 .e-emoji{font-size:24px}
+.eli5 .e-title{font-weight:800;font-size:14.5px}
+.eli5 .e-tag{margin-left:auto;font-size:10.5px;font-weight:800;letter-spacing:.06em;padding:3px 9px;border-radius:20px}
+.e-tag.good{background:var(--bull-dim);color:var(--bull)}
+.e-tag.warn{background:var(--gold-dim);color:var(--gold)}
+.e-tag.bad{background:rgba(255,77,109,.12);color:var(--bear)}
+.eli5 .e-body{font-size:13.2px;color:var(--muted);line-height:1.55}
+.eli5 .e-body b{color:var(--text);font-family:'JetBrains Mono',monospace;font-weight:700}
+.pv-panel{background:var(--bg-2);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:14px}
+.pv-panel .p-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.pv-panel .p-title{font-weight:800;font-size:15px}
+.pv-panel .p-sub{font-size:12px;color:var(--muted)}
+.pv-toggles{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.pv-tgl{padding:6px 11px;border-radius:9px;background:var(--bg-1);border:1px solid var(--border);cursor:pointer;
+  font-family:inherit;font-size:11.5px;font-weight:700;color:var(--muted)}
+.pv-tgl.on{border-color:var(--gold);color:var(--gold);background:var(--gold-dim)}
+.pchart-box{position:relative;width:100%;height:380px}
+.pchart-box.rsi{height:120px;margin-top:8px}
+.pchart-box canvas{position:absolute;inset:0;width:100%;height:100%}
+.pv-tip{position:absolute;pointer-events:none;z-index:5;display:none;background:var(--bg-1);border:1px solid var(--border-strong);
+  border-radius:10px;padding:8px 11px;font-size:11.5px;font-family:'JetBrains Mono',monospace;box-shadow:0 10px 26px rgba(0,0,0,.3);white-space:nowrap}
+.pv-tip .u{color:var(--bull)} .pv-tip .d{color:var(--bear)}
+.plan-wrap{display:grid;grid-template-columns:170px 1fr;gap:20px;align-items:stretch}
+.plan-ladder{position:relative;min-height:280px}
+.plan-ladder .rail{position:absolute;left:24px;top:8px;bottom:8px;width:4px;border-radius:3px;
+  background:linear-gradient(180deg,var(--bull),var(--gold),var(--bear))}
+.plan-stop{position:absolute;left:0;right:0;transform:translateY(-50%);display:flex;align-items:center;gap:8px}
+.plan-stop .dot{width:14px;height:14px;border-radius:50%;border:3px solid var(--bg-2);margin-left:18px;flex:0 0 auto}
+.plan-stop .lbl{font-size:11px;font-weight:800;letter-spacing:.05em}
+.plan-stop .px{font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:700;margin-left:auto}
+.plan-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;align-content:start}
+.plan-card{background:var(--bg-1);border:1px solid var(--border);border-radius:13px;padding:12px 14px}
+.plan-card .k{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:flex;gap:6px;align-items:center}
+.plan-card .v{font-size:19px;font-weight:900;font-family:'JetBrains Mono',monospace;margin-top:4px}
+.plan-card.buy .v{color:var(--bull)} .plan-card.stop .v{color:var(--bear)} .plan-card.tgt .v{color:var(--gold)}
+.plan-note{grid-column:1/-1;font-size:12.5px;color:var(--muted);line-height:1.5;border-top:1px dashed var(--border);padding-top:10px}
+.pv-reasons{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:13px}
+.pv-reasons ul{margin:8px 0 0;padding:0 0 0 4px;list-style:none}
+.pv-reasons li{font-size:13px;color:var(--muted);padding:5px 0 5px 24px;position:relative;line-height:1.45}
+.pv-reasons li::before{content:"";position:absolute;left:4px;top:11px;width:9px;height:9px;border-radius:50%}
+.pv-reasons .pro li::before{background:var(--bull)} .pv-reasons .con li::before{background:var(--bear)}
+@media(max-width:700px){.plan-wrap{grid-template-columns:1fr}.plan-ladder{display:none}.pv-scores{margin-left:0}.pchart-box{height:300px}}
 </style>
 </head>
 <body>
@@ -474,6 +549,10 @@ html[data-theme="light"] .loader{background:rgba(238,242,248,.82)}
       <button class="btn-analyze" id="analyze-btn">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 6-7"/><path d="M14 8h4v4"/></svg>
         Analyze
+      </button>
+      <button class="btn-predict" id="predict-btn" title="Technical + fundamental outlook — guidance only, not a buy/sell call">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7"/><path d="M12 6V3M9 3h6"/><path d="M9.5 13.5l2 2 3.5-4"/></svg>
+        Prediction
       </button>
     </div>
     <div class="chips" id="index-chips">
@@ -569,6 +648,87 @@ html[data-theme="light"] .loader{background:rgba(238,242,248,.82)}
       </div>
       <div class="chart-box"><canvas id="trend-chart"></canvas></div>
       <!-- sparkline removed (v2) -->
+    </div>
+  </div>
+
+  <!-- PREDICTION STAGE -->
+  <div id="pstage">
+
+    <!-- VERDICT BANNER (always on top) -->
+    <div class="pv-banner" id="pv-banner">
+      <div class="pv-top">
+        <div class="pv-face" id="pv-face">⛅</div>
+        <div>
+          <div class="pv-label" id="pv-label">—</div>
+          <div class="pv-blurb" id="pv-blurb"></div>
+        </div>
+        <div class="pv-scores">
+          <div class="pv-score"><div class="k">Chart Health</div><div class="v" id="pv-tech">0</div><div class="bar"><i id="pv-tech-bar"></i></div></div>
+          <div class="pv-score"><div class="k">Business Health</div><div class="v" id="pv-fund">0</div><div class="bar"><i id="pv-fund-bar"></i></div></div>
+          <div class="pv-score"><div class="k">Overall Outlook</div><div class="v" id="pv-comb">0</div><div class="bar"><i id="pv-comb-bar"></i></div></div>
+        </div>
+      </div>
+      <div class="pv-disclaimer">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 9v5"/><circle cx="12" cy="17.2" r=".6" fill="currentColor" stroke="none"/><path d="M10.3 3.9L2.6 17.5A2 2 0 004.3 20.5h15.4a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+        <div><strong>Disclaimer:</strong> this prediction is <strong>guidance for learning only</strong> — it is <strong>not a call to buy or sell</strong> any share. It is built automatically from public price history and financial statements, and markets can always surprise. Please do your own research and never risk money you cannot afford to lose.</div>
+      </div>
+    </div>
+
+    <!-- ELI5 STORY CARDS -->
+    <div class="section-title">
+      <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.8 2.8 0 015.6.6c0 1.8-2.8 2.2-2.8 3.9"/><circle cx="12" cy="17.3" r=".6" fill="currentColor" stroke="none"/></svg></div>
+      <h2>The Story, Told Simply</h2>
+      <span class="hint">Each card explains one thing the way you'd tell a friend</span>
+    </div>
+    <div class="eli5-grid" id="eli5-grid"></div>
+
+    <!-- CANDLE CHART -->
+    <div class="pv-panel">
+      <div class="p-head">
+        <div>
+          <div class="p-title">🕯️ The Candle Chart</div>
+          <div class="p-sub" id="pchart-sub">Each candle = one week. Green candle: price ended higher than it started. Red: it ended lower.</div>
+        </div>
+        <div class="pv-toggles" id="pv-toggles">
+          <button class="pv-tgl on" data-layer="ema">Moving Averages</button>
+          <button class="pv-tgl on" data-layer="sr">Floors &amp; Ceilings</button>
+          <button class="pv-tgl" data-layer="fib">Fibonacci</button>
+          <button class="pv-tgl on" data-layer="plan">Trade Plan</button>
+          <button class="pv-tgl" data-range="40">Zoom</button>
+        </div>
+      </div>
+      <div class="pchart-box"><canvas id="pcandle-canvas"></canvas><div class="pv-tip" id="pv-tip"></div></div>
+      <div class="pchart-box rsi"><canvas id="prsi-canvas"></canvas></div>
+      <div class="p-sub" style="margin-top:8px" id="pchart-note"></div>
+    </div>
+
+    <!-- TRADE PLAN -->
+    <div class="pv-panel">
+      <div class="p-head">
+        <div>
+          <div class="p-title">🗺️ The Game Plan — with the safety rope</div>
+          <div class="p-sub">Analysts never buy without knowing exactly where they'd admit they were wrong.</div>
+        </div>
+      </div>
+      <div class="plan-wrap">
+        <div class="plan-ladder" id="plan-ladder"><div class="rail"></div></div>
+        <div class="plan-cards" id="plan-cards"></div>
+      </div>
+    </div>
+
+    <!-- WHY -->
+    <div class="pv-panel">
+      <div class="p-head"><div><div class="p-title">⚖️ Weighing the Evidence</div>
+        <div class="p-sub">Every point the engine counted for and against, in plain words.</div></div></div>
+      <div class="pv-reasons">
+        <div class="pro"><strong style="color:var(--bull)">👍 Points for going up</strong><ul id="pv-pros"></ul></div>
+        <div class="con"><strong style="color:var(--bear)">👎 Points for being careful</strong><ul id="pv-cons"></ul></div>
+      </div>
+    </div>
+
+    <div class="pv-disclaimer" style="margin-bottom:18px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 9v5"/><circle cx="12" cy="17.2" r=".6" fill="currentColor" stroke="none"/><path d="M10.3 3.9L2.6 17.5A2 2 0 004.3 20.5h15.4a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+      <div>Reminder: everything above is <strong>educational guidance, not a purchase or sell call</strong>. Prices, supports and targets are estimates computed from historical data and can be invalidated by news, results or market mood at any time.</div>
     </div>
   </div>
 
@@ -1502,6 +1662,466 @@ function initBgParticles(){
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');
   clearTimeout(t._tm);t._tm=setTimeout(()=>t.classList.remove('show'),3400);}
 function fmtTs(iso){try{const d=new Date(iso);return d.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});}catch(e){return iso;}}
+
+/* =================================================================
+   PREDICTION ENGINE  (v3)
+   -----------------------------------------------------------------
+   A JavaScript mirror of predictor.py. The methodology is modelled on
+   how seasoned PSX analysts read a chart on-air:
+     trend structure (higher highs / higher lows) → EMA 21 & 89 as the
+     dynamic supports → support/resistance clusters → Fibonacci
+     retracement of the last rally → RSI(14) divergence → volumes →
+     a defined Buy-1 / Buy-2 / Stop-loss / Target trade plan, sized so
+     portfolio risk stays ~2–3%. Fundamentals then set the conviction.
+   GUIDANCE ONLY — NEVER A BUY/SELL CALL.
+   ================================================================= */
+
+/* ---------- math helpers ---------- */
+function pEMA(v,p){const out=new Array(v.length).fill(null);if(v.length<p)return out;
+  const k=2/(p+1);let s=0;for(let i=0;i<p;i++)s+=v[i];let prev=s/p;out[p-1]=prev;
+  for(let i=p;i<v.length;i++){prev=v[i]*k+prev*(1-k);out[i]=prev;}return out;}
+function pSMA(v,p){const out=new Array(v.length).fill(null);if(v.length<p)return out;
+  let s=0;for(let i=0;i<p;i++)s+=v[i];out[p-1]=s/p;
+  for(let i=p;i<v.length;i++){s+=v[i]-v[i-p];out[i]=s/p;}return out;}
+function pRSI(v,p=14){const n=v.length,out=new Array(n).fill(null);if(n<=p)return out;
+  let g=0,l=0;for(let i=1;i<=p;i++){const d=v[i]-v[i-1];g+=Math.max(d,0);l+=Math.max(-d,0);}
+  let ag=g/p,al=l/p;out[p]=al===0?100:100-100/(1+ag/al);
+  for(let i=p+1;i<n;i++){const d=v[i]-v[i-1];
+    ag=(ag*(p-1)+Math.max(d,0))/p;al=(al*(p-1)+Math.max(-d,0))/p;
+    out[i]=al===0?100:100-100/(1+ag/al);}return out;}
+function pSwings(v,lb){const hi=[],lo=[];
+  for(let i=lb;i<v.length-lb;i++){let isH=true,isL=true;
+    for(let j=i-lb;j<=i+lb;j++){if(j===i)continue;
+      if(v[j]>=v[i])isH=false;if(v[j]<=v[i])isL=false;}
+    if(isH)hi.push(i);if(isL)lo.push(i);}return {hi,lo};}
+function pCluster(prices,tol=0.015){const lv=[];
+  for(const p of [...prices].sort((a,b)=>a-b)){let hit=false;
+    for(const L of lv){if(Math.abs(p-L.price)/L.price<=tol){L.touches++;
+      L.price=(L.price*(L.touches-1)+p)/L.touches;hit=true;break;}}
+    if(!hit)lv.push({price:p,touches:1});}
+  lv.sort((a,b)=>b.touches-a.touches||a.price-b.price);return lv;}
+function pFib(closes){const n=closes.length;if(n<20)return null;
+  const w=closes.slice(-Math.min(n,120));
+  let loI=0;for(let i=1;i<w.length;i++)if(w[i]<w[loI])loI=i;
+  const after=w.slice(loI);if(after.length<5)return null;
+  let hiI=0;for(let i=1;i<after.length;i++)if(after[i]>after[hiI])hiI=i;
+  const lo=w[loI],hi=after[hiI];if(hi<=lo*1.05)return null;const r=hi-lo;
+  return {rally_low:lo,rally_high:hi,levels:{'23.6%':hi-r*.236,'38.2%':hi-r*.382,'50.0%':hi-r*.5,'61.8%':hi-r*.618}};}
+function pInterval(dates){if(dates.length<3)return 1;const gaps=[];
+  for(let i=1;i<dates.length;i++){const g=(new Date(dates[i])-new Date(dates[i-1]))/864e5;
+    if(g>0)gaps.push(g);}gaps.sort((a,b)=>a-b);
+  return gaps.length?gaps[Math.floor(gaps.length/2)]:1;}
+/* candles synthesised from closes: daily→weekly, weekly→monthly */
+function pCandles(hist){if(!hist.length)return {candles:[],tf:'weekly'};
+  const iv=pInterval(hist.map(p=>p.date));
+  const weekly=iv<=2.5;
+  const key=(t)=>{if(weekly){const d=new Date(Date.UTC(t.getFullYear(),t.getMonth(),t.getDate()));
+      const day=(d.getUTCDay()+6)%7;d.setUTCDate(d.getUTCDate()-day+3);
+      const y0=new Date(Date.UTC(d.getUTCFullYear(),0,4));
+      const wk=1+Math.round(((d-y0)/864e5-3+((y0.getUTCDay()+6)%7))/7);
+      return d.getUTCFullYear()+'-W'+String(wk).padStart(2,'0');}
+    return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0');};
+  const map={},order=[];
+  hist.forEach((p,idx)=>{const c=p.close;if(c==null)return;const t=new Date(p.date);
+    const k=key(t);let b=map[k];
+    if(!b){b=map[k]={date:p.date,open:c,high:c,low:c,close:c,volume:p.volume||0,endIdx:idx};order.push(k);}
+    else{b.high=Math.max(b.high,c);b.low=Math.min(b.low,c);b.close=c;b.date=p.date;
+      b.volume+=(p.volume||0);b.endIdx=idx;}});
+  return {candles:order.map(k=>map[k]),tf:weekly?'weekly':'monthly'};}
+
+/* ---------- the analyst brain ---------- */
+function buildPrediction(data){
+  const hist=(data.price_history||[]).filter(p=>p.close!=null);
+  const closes=hist.map(p=>p.close), dates=hist.map(p=>p.date);
+  const price=(data.profile&&data.profile.price)||closes[closes.length-1];
+  if(closes.length<30||price==null)return {error:'Not enough price history to build a prediction for this stock yet.'};
+
+  const iv=pInterval(dates), perYear=iv<=2.5?252:52, scale=iv<=2.5?1:5;
+  const p21=Math.max(3,Math.round(21/scale)), p89=Math.max(8,Math.round(89/scale)), p200=Math.max(20,Math.round(200/scale));
+  const ema21=pEMA(closes,p21), ema89=pEMA(closes,p89), sma200=pSMA(closes,p200), rsi14=pRSI(closes,14);
+  const last=closes.length-1;
+  const vE21=ema21[last], vE89=ema89[last], vS200=sma200[last], vRSI=rsi14[last];
+
+  const lb=perYear===52?2:3;
+  const {hi:hiIdx,lo:loIdx}=pSwings(closes,lb);
+  let structure='sideways';
+  if(hiIdx.length>=2&&loIdx.length>=2){
+    const hh=closes[hiIdx[hiIdx.length-1]]>closes[hiIdx[hiIdx.length-2]];
+    const hl=closes[loIdx[loIdx.length-1]]>closes[loIdx[loIdx.length-2]];
+    if(hh&&hl)structure='uptrend';else if(!hh&&!hl)structure='downtrend';}
+
+  const above21=vE21!=null&&price>vE21, above89=vE89!=null&&price>vE89, above200=vS200!=null&&price>vS200;
+
+  /* RSI divergence on the last two swing highs / lows */
+  let divergence=null;
+  if(hiIdx.length>=2){const a=hiIdx[hiIdx.length-2],b=hiIdx[hiIdx.length-1];
+    if(rsi14[a]!=null&&rsi14[b]!=null&&closes[b]>closes[a]&&rsi14[b]<rsi14[a]-1)
+      divergence={type:'bearish',points:[a,b]};}
+  if(!divergence&&loIdx.length>=2){const a=loIdx[loIdx.length-2],b=loIdx[loIdx.length-1];
+    if(rsi14[a]!=null&&rsi14[b]!=null&&closes[b]<closes[a]&&rsi14[b]>rsi14[a]+1)
+      divergence={type:'bullish',points:[a,b]};}
+
+  const cut=Math.max(0,last-perYear);
+  const supports=pCluster(loIdx.filter(i=>i>=cut&&closes[i]<price).map(i=>closes[i])).slice(0,3)
+      .sort((a,b)=>b.price-a.price);
+  const resistances=pCluster(hiIdx.filter(i=>i>=cut&&closes[i]>price).map(i=>closes[i])).slice(0,3)
+      .sort((a,b)=>a.price-b.price);
+  const fib=pFib(closes);
+  const yr=closes.slice(-perYear);
+  const hi52=Math.max(...yr), lo52=Math.min(...yr);
+
+  /* volume read (live PSX feed carries it; demo may not) */
+  const vols=hist.map(p=>p.volume);
+  let volumeNote=null;
+  if(vols.some(v=>v)){const rec=vols.slice(-10).filter(Boolean),base=vols.slice(-60,-10).filter(Boolean);
+    if(rec.length&&base.length){const ratio=(rec.reduce((a,b)=>a+b,0)/rec.length)/Math.max(1e-9,base.reduce((a,b)=>a+b,0)/base.length);
+      volumeNote=ratio>1.25?'expanding':ratio<0.75?'drying up':'normal';}}
+
+  /* trade plan — a buy zone must sit AT OR BELOW the market ("buy on dips", never chase) */
+  const buyCands=supports.filter(s=>s.price<price*0.999).map(s=>s.price);
+  if(vE21&&vE21<price*0.999)buyCands.push(vE21);
+  let buy1=buyCands.length?Math.max(...buyCands):price*0.97;
+  let buy2=null;
+  if(fib){for(const k of ['50.0%','61.8%']){const lv=fib.levels[k];if(lv<buy1*0.995){buy2=lv;break;}}}
+  if(buy2==null&&supports.length>1&&supports[1].price<buy1*0.995)buy2=supports[1].price;
+  if(buy2==null||buy2>=buy1)buy2=buy1*0.93;
+  let stop=Math.min(buy1,buy2)*0.96;
+  if(fib&&fib.levels['61.8%']<stop)stop=fib.levels['61.8%']*0.985;
+  let t1=resistances.length?resistances[0].price:hi52;
+  if(t1<=price)t1=hi52>price?hi52:price*1.10;
+  const t2=Math.max(hi52,t1)*1.08;
+  const avgBuy=(buy1+buy2)/2, rr=(t1-avgBuy)/Math.max(1e-9,avgBuy-stop);
+
+  /* weight of evidence */
+  let bull=0,bear=0;const pros=[],cons=[];
+  if(structure==='uptrend'){bull+=2;pros.push('The price is climbing a staircase: each step up (high) and each rest (low) is higher than the last.');}
+  else if(structure==='downtrend'){bear+=2;cons.push('The price is walking down a staircase — every bounce stops lower than the previous one.');}
+  else pros.push('The price is moving sideways — the tug-of-war between buyers and sellers is even for now.');
+  if(above21){bull+=1;pros.push('It is standing above its short-term trampoline (the 21-EMA) — dips keep getting bought.');}
+  else{bear+=1;cons.push('It has slipped below its short-term trampoline (the 21-EMA) — recent buyers are underwater.');}
+  if(above89){bull+=1.5;pros.push('The big trend line (89-EMA) is still safely below the price — the long walk is upward.');}
+  else{bear+=1.5;cons.push('The price is under the big trend line (89-EMA) — the long-term walk is under pressure.');}
+  if(above200)bull+=1;else if(vS200!=null)bear+=1;
+  if(divergence){
+    if(divergence.type==='bearish'){bear+=1.5;cons.push('A warning whisper: price made a new high but its energy meter (RSI) did not — a bearish divergence. Often the stock goes sideways or dips after this.');}
+    else{bull+=1.5;pros.push('A hopeful whisper: price made a new low but its energy meter (RSI) refused to — a bullish divergence. Sellers are running out of steam.');}}
+  if(vRSI!=null){
+    if(vRSI>=70){bear+=0.5;cons.push('The energy meter (RSI '+vRSI.toFixed(0)+') is very hot — after a sprint, even strong stocks need to catch their breath.');}
+    else if(vRSI<=35){bull+=0.5;pros.push('The energy meter (RSI '+vRSI.toFixed(0)+') is very low — the selling looks tired.');}}
+  if(volumeNote==='expanding'&&structure==='uptrend'){bull+=0.5;pros.push('More and more people are trading it — volumes are expanding with the move, which is healthy fuel.');}
+  if(volumeNote==='drying up'&&structure==='uptrend'){bear+=0.25;cons.push('Volumes are drying up — a rally without fuel can stall.');}
+
+  const fundScore=+(data.score||50);
+  if(fundScore>=70)pros.push('The company behind the share gets a strong report card ('+fundScore.toFixed(0)+'/100 fundamentals) — good businesses recover from dips.');
+  else if(fundScore<45)cons.push('The company\u2019s report card is weak ('+fundScore.toFixed(0)+'/100 fundamentals) — a cheap price alone is not a reason to own a struggling business.');
+
+  let tech=50+(bull-bear)*7.5;tech=Math.max(5,Math.min(95,tech));
+  const combined=tech*0.55+fundScore*0.45;
+  let vkey; if(combined>=72&&structure!=='downtrend')vkey='strong_bullish';
+  else if(combined>=58)vkey='bullish_dips';
+  else if(combined>=44)vkey='sideways';
+  else if(combined>=30)vkey='cautious';
+  else vkey='bearish';
+  const VD={
+    strong_bullish:['☀️','Looking Strong','Trend, momentum and the business itself all point up. The plan: buy the dips near support — never chase the spikes.'],
+    bullish_dips:['🌤️','Positive — Buy on Dips','The path of least resistance is up, but only pay value prices: let the stock come down to your buy zones.'],
+    sideways:['⛅','Sideways — Be Patient','Bulls and bears are evenly matched. Let it consolidate for some sessions and prove itself before committing.'],
+    cautious:['🌧️','Weak — Extra Care Needed','More warning signs than green lights right now. If you participate at all, keep it small and keep the stop-loss tight.'],
+    bearish:['⛈️','Negative — Better to Wait','Both the chart and the business numbers are struggling. Remember: staying out is also a position.']};
+  const [face,label,blurb]=VD[vkey];
+  const cd=pCandles(hist);
+
+  return {
+    price, interval: iv<=2.5?'daily':'weekly',
+    candles:cd.candles, candleTf:cd.tf,
+    series:{closes,ema21,ema89,sma200,rsi14},
+    periods:{p21,p89,p200},
+    structure, divergence, supports, resistances, fib,
+    week52:{high:hi52,low:lo52}, volumeNote,
+    plan:{buy1,buy2,stop,t1,t2,rr},
+    scores:{tech:+tech.toFixed(1),fund:+fundScore.toFixed(1),combined:+combined.toFixed(1)},
+    reasons:{pros,cons},
+    verdict:{key:vkey,face,label,blurb},
+  };
+}
+
+/* ---------- ELI5 narration cards ---------- */
+function eli5Cards(pr){
+  const P=(n)=>'₨ '+fmtPx(n);
+  const cards=[];
+  const sTag=pr.structure==='uptrend'?['good','WALKING UP']:pr.structure==='downtrend'?['bad','WALKING DOWN']:['warn','STANDING STILL'];
+  cards.push({emoji:'🚶',title:'Which way is it walking?',tag:sTag,
+    body:pr.structure==='uptrend'
+      ?'Imagine the price climbing stairs: every jump reaches <b>higher</b> and every rest stops <b>higher</b> too. That staircase pattern is called an <b>uptrend</b>, and it stays alive until a rest-stop breaks below the previous one.'
+      :pr.structure==='downtrend'
+      ?'The price is going down a slide: each bounce is <b>smaller</b> than the one before. Analysts call this a <b>downtrend</b> — trying to catch it mid-slide usually hurts.'
+      :'Right now the price is pacing inside a room — not really climbing, not really falling. Analysts call this <b>consolidation</b>, and the smart move is to wait for it to pick a door.'});
+  const e21=pr.series.ema21[pr.series.ema21.length-1], e89=pr.series.ema89[pr.series.ema89.length-1];
+  cards.push({emoji:'🛟',title:'The safety nets (moving averages)',
+    tag:(e21&&pr.price>e21&&e89&&pr.price>e89)?['good','ABOVE BOTH']:(e89&&pr.price>e89)?['warn','TESTING']:['bad','BELOW'],
+    body:'Two invisible nets follow the price around: a quick one (the <b>21-EMA</b>, now near <b>'+(e21?P(e21):'—')+'</b>) and a big slow one (the <b>89-EMA</b>, near <b>'+(e89?P(e89):'—')+'</b>). As long as the price bounces on these nets, the climb is healthy — analysts even place their stop-losses just under them.'});
+  const nearestSup=pr.supports[0], nearestRes=pr.resistances[0];
+  cards.push({emoji:'🏠',title:'The floor and the ceiling',tag:['warn','LEVELS'],
+    body:'Prices remember where lots of buying and selling happened. The nearest <b>floor (support)</b> is around <b>'+(nearestSup?P(nearestSup.price):P(pr.week52.low))+'</b> — buyers showed up there before and may again. The nearest <b>ceiling (resistance)</b> is near <b>'+(nearestRes?P(nearestRes.price):P(pr.week52.high))+'</b> — sellers appeared there last time. Breaking the ceiling with strength usually starts a new climb.'});
+  if(pr.fib){cards.push({emoji:'📏',title:'The bounce-back ruler (Fibonacci)',tag:['warn','RETRACEMENT'],
+    body:'After a big rally (from <b>'+P(pr.fib.rally_low)+'</b> to <b>'+P(pr.fib.rally_high)+'</b>), prices often give back a “fair share” before continuing — commonly half. That <b>50% give-back level</b> sits near <b>'+P(pr.fib.levels['50.0%'])+'</b>; if the price cools down to there and holds, it is a classic buy-on-dips zone.'});}
+  const r=pr.series.rsi14[pr.series.rsi14.length-1];
+  cards.push({emoji:'🔋',title:'The energy meter (RSI)',
+    tag:r==null?['warn','—']:r>=70?['warn','VERY HOT']:r<=35?['warn','VERY TIRED']:['good','HEALTHY'],
+    body:'RSI is like a battery gauge from 0 to 100. Right now it reads <b>'+(r!=null?r.toFixed(0):'—')+'</b>. Above 70 the stock has sprinted and may need rest; below 30 the sellers are exhausted. '+(pr.divergence?(pr.divergence.type==='bearish'?'⚠️ Also, the price made a new high while the battery read <b>lower</b> — a <b>bearish divergence</b>. That whisper often precedes a pause or dip.':'✨ Better still, the price made a new low while the battery read <b>higher</b> — a <b>bullish divergence</b>. Sellers are losing strength.'):'No divergence warnings between price and RSI at the moment.')});
+  if(pr.volumeNote)cards.push({emoji:'📢',title:'How loud is the crowd? (volume)',
+    tag:pr.volumeNote==='expanding'?['good','GETTING LOUD']:pr.volumeNote==='drying up'?['warn','GOING QUIET']:['good','NORMAL'],
+    body:'Volume is how many shares change hands. Lately it is <b>'+pr.volumeNote+'</b>. A price move with a loud crowd behind it is trustworthy; a move in silence can fade quickly.'});
+  cards.push({emoji:'🏫',title:'The company\u2019s report card',
+    tag:pr.scores.fund>=70?['good',pr.scores.fund.toFixed(0)+'/100']:pr.scores.fund>=45?['warn',pr.scores.fund.toFixed(0)+'/100']:['bad',pr.scores.fund.toFixed(0)+'/100'],
+    body:'A share is a slice of a real business, so the business\u2019s health matters most in the long run. This company scores <b>'+pr.scores.fund.toFixed(0)+'/100</b> on fundamentals (profits, debt, dividends…). '+(pr.scores.fund>=70?'A strong business on a dip is an opportunity; a strong business at a spike still needs patience.':pr.scores.fund>=45?'A middling report card means the chart has to do more of the convincing.':'A weak report card means even a pretty chart deserves extra suspicion.')});
+  return cards;
+}
+
+/* =================================================================
+   PREDICTION — CHART RENDERERS (custom canvas candlesticks)
+   ================================================================= */
+let PRED=null, predLayers={ema:true,sr:true,fib:false,plan:true}, predZoom=false;
+
+function _setupCanvas(cv){const dpr=window.devicePixelRatio||1;
+  const r=cv.parentElement.getBoundingClientRect();
+  cv.width=r.width*dpr;cv.height=r.height*dpr;
+  const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,W:r.width,H:r.height};}
+
+function _visibleCandles(pr){const n=predZoom?40:90;
+  return pr.candles.slice(-Math.min(pr.candles.length,n));}
+
+function drawPredCharts(){
+  if(!PRED||PRED.error)return;
+  const pr=PRED;
+  const cnd=_visibleCandles(pr);
+  const cv=$('pcandle-canvas');if(!cv)return;
+  const {ctx,W,H}=_setupCanvas(cv);
+  const padL=10,padR=74,padT=14,padB=22;
+  const cw=(W-padL-padR)/cnd.length;
+
+  /* y-domain: candles + visible levels */
+  let lo=Infinity,hi=-Infinity;
+  cnd.forEach(c=>{lo=Math.min(lo,c.low);hi=Math.max(hi,c.high);});
+  const lvls=[];
+  if(predLayers.sr){pr.supports.forEach(s=>lvls.push(s.price));pr.resistances.forEach(s=>lvls.push(s.price));}
+  if(predLayers.fib&&pr.fib)Object.values(pr.fib.levels).forEach(v=>lvls.push(v));
+  if(predLayers.plan){const p=pr.plan;lvls.push(p.buy1,p.buy2,p.stop,p.t1);}
+  lvls.forEach(v=>{if(v>lo*0.75&&v<hi*1.3){lo=Math.min(lo,v);hi=Math.max(hi,v);}});
+  const span=(hi-lo)||1;lo-=span*0.05;hi+=span*0.05;
+  const Y=(v)=>padT+(hi-v)/(hi-lo)*(H-padT-padB);
+  const X=(i)=>padL+i*cw+cw/2;
+
+  const css=(v)=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const BULL=css('--bull')||'#00E5A0', BEAR=css('--bear')||'#FF4D6D',
+        GOLD=css('--gold')||'#FFB627', MUT=css('--muted')||'#8794AE', BORD=css('--border')||'rgba(135,148,174,.2)';
+
+  ctx.clearRect(0,0,W,H);
+  /* grid */
+  ctx.strokeStyle=BORD;ctx.lineWidth=1;ctx.font='10px JetBrains Mono';ctx.fillStyle=MUT;
+  for(let g=0;g<=4;g++){const v=lo+(hi-lo)*g/4,y=Y(v);
+    ctx.globalAlpha=.5;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(W-padR,y);ctx.stroke();ctx.globalAlpha=1;
+    ctx.fillText(fmtPx(v),W-padR+6,y+3);}
+  /* x labels (few) */
+  const step=Math.ceil(cnd.length/6);
+  cnd.forEach((c,i)=>{if(i%step===0){const d=new Date(c.date);
+    ctx.fillText(d.toLocaleDateString('en-GB',{month:'short',year:'2-digit'}),X(i)-16,H-6);}});
+
+  const lvlLine=(v,color,dash,label)=>{if(v==null)return;const y=Y(v);
+    if(y<padT-4||y>H-padB+4)return;
+    ctx.save();ctx.strokeStyle=color;ctx.setLineDash(dash);ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(W-padR,y);ctx.stroke();ctx.setLineDash([]);
+    if(label){ctx.fillStyle=color;ctx.font='bold 9.5px JetBrains Mono';
+      const tw=ctx.measureText(label).width;
+      ctx.globalAlpha=.92;ctx.fillRect(W-padR-tw-12,y-8,tw+10,15);
+      ctx.fillStyle='#0b0f18';ctx.fillText(label,W-padR-tw-7,y+3);}
+    ctx.restore();};
+
+  /* layers under candles */
+  if(predLayers.fib&&pr.fib)Object.entries(pr.fib.levels).forEach(([k,v])=>lvlLine(v,GOLD,[2,4],'fib '+k));
+  if(predLayers.sr){
+    pr.supports.forEach((s,i)=>lvlLine(s.price,BULL,[6,4],i===0?'floor':''));
+    pr.resistances.forEach((s,i)=>lvlLine(s.price,BEAR,[6,4],i===0?'ceiling':''));}
+  if(predLayers.plan){const p=pr.plan;
+    lvlLine(p.buy1,BULL,[1,0],'BUY 1 '+fmtPx(p.buy1));
+    lvlLine(p.buy2,BULL,[1,0],'BUY 2 '+fmtPx(p.buy2));
+    lvlLine(p.stop,BEAR,[1,0],'STOP '+fmtPx(p.stop));
+    lvlLine(p.t1,GOLD,[1,0],'TARGET '+fmtPx(p.t1));}
+
+  /* EMA overlays sampled at each candle's end index */
+  if(predLayers.ema){
+    const drawLine=(series,color)=>{ctx.save();ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.globalAlpha=.85;
+      ctx.beginPath();let started=false;
+      cnd.forEach((c,i)=>{const v=series[c.endIdx];if(v==null)return;
+        const x=X(i),y=Y(v);if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);});
+      ctx.stroke();ctx.restore();};
+    drawLine(pr.series.ema21,'#5aa9ff');drawLine(pr.series.ema89,GOLD);}
+
+  /* candles */
+  const bw=Math.max(3,Math.min(14,cw*0.62));
+  cnd.forEach((c,i)=>{const x=X(i),up=c.close>=c.open,col=up?BULL:BEAR;
+    ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(x,Y(c.high));ctx.lineTo(x,Y(c.low));ctx.stroke();
+    const yO=Y(c.open),yC=Y(c.close);
+    const top=Math.min(yO,yC),h=Math.max(1.5,Math.abs(yO-yC));
+    if(up){ctx.globalAlpha=.9;ctx.fillRect(x-bw/2,top,bw,h);ctx.globalAlpha=1;}
+    else ctx.fillRect(x-bw/2,top,bw,h);});
+
+  /* divergence line on price */
+  if(pr.divergence){const [a,b]=pr.divergence.points;
+    const ia=cnd.findIndex(c=>c.endIdx>=a), ib=cnd.findIndex(c=>c.endIdx>=b);
+    if(ia>=0&&ib>=0){ctx.save();
+      ctx.strokeStyle=pr.divergence.type==='bearish'?BEAR:BULL;ctx.lineWidth=2;ctx.setLineDash([5,4]);
+      ctx.beginPath();ctx.moveTo(X(ia),Y(pr.series.closes[a]));ctx.lineTo(X(ib),Y(pr.series.closes[b]));ctx.stroke();
+      ctx.setLineDash([]);ctx.restore();}}
+
+  /* current price marker */
+  lvlLine(pr.price,MUT,[3,3],'now '+fmtPx(pr.price));
+
+  cv._geom={cnd,X,Y,padL,padR,cw,W,H};
+  drawRsiChart(cnd);
+}
+
+function drawRsiChart(cnd){
+  const pr=PRED,cv=$('prsi-canvas');if(!cv)return;
+  const {ctx,W,H}=_setupCanvas(cv);
+  const padL=10,padR=74,padT=8,padB=6;
+  const css=(v)=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const BULL=css('--bull'),BEAR=css('--bear'),MUT=css('--muted'),BORD=css('--border');
+  const Y=(v)=>padT+(100-v)/100*(H-padT-padB);
+  const X=(i)=>padL+i*((W-padL-padR)/cnd.length)+((W-padL-padR)/cnd.length)/2;
+  ctx.clearRect(0,0,W,H);
+  ctx.font='9.5px JetBrains Mono';ctx.fillStyle=MUT;
+  [[70,BEAR],[50,BORD],[30,BULL]].forEach(([lv,c])=>{ctx.strokeStyle=c;ctx.globalAlpha=.55;
+    ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(padL,Y(lv));ctx.lineTo(W-padR,Y(lv));ctx.stroke();
+    ctx.setLineDash([]);ctx.globalAlpha=1;ctx.fillText('RSI '+lv,W-padR+6,Y(lv)+3);});
+  ctx.strokeStyle='#a78bfa';ctx.lineWidth=1.7;ctx.beginPath();let started=false;
+  cnd.forEach((c,i)=>{const v=pr.series.rsi14[c.endIdx];if(v==null)return;
+    const x=X(i),y=Y(v);if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);});
+  ctx.stroke();
+  if(pr.divergence){const [a,b]=pr.divergence.points;
+    const ia=cnd.findIndex(c=>c.endIdx>=a),ib=cnd.findIndex(c=>c.endIdx>=b);
+    if(ia>=0&&ib>=0&&pr.series.rsi14[a]!=null&&pr.series.rsi14[b]!=null){
+      ctx.strokeStyle=pr.divergence.type==='bearish'?BEAR:BULL;ctx.lineWidth=2;ctx.setLineDash([5,4]);
+      ctx.beginPath();ctx.moveTo(X(ia),Y(pr.series.rsi14[a]));ctx.lineTo(X(ib),Y(pr.series.rsi14[b]));ctx.stroke();ctx.setLineDash([]);}}
+}
+
+/* hover tooltip on the candle chart */
+function wirePredTooltip(){
+  const cv=$('pcandle-canvas'),tip=$('pv-tip');if(!cv||cv._tipWired)return;cv._tipWired=true;
+  cv.addEventListener('mousemove',(e)=>{
+    const g=cv._geom;if(!g){tip.style.display='none';return;}
+    const r=cv.getBoundingClientRect();
+    const i=Math.floor((e.clientX-r.left-g.padL)/g.cw);
+    if(i<0||i>=g.cnd.length){tip.style.display='none';return;}
+    const c=g.cnd[i],up=c.close>=c.open;
+    tip.innerHTML='<div>'+new Date(c.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})+'</div>'+
+      '<div class="'+(up?'u':'d')+'">O '+fmtPx(c.open)+' &nbsp;H '+fmtPx(c.high)+'</div>'+
+      '<div class="'+(up?'u':'d')+'">L '+fmtPx(c.low)+' &nbsp;C '+fmtPx(c.close)+'</div>'+
+      (c.volume?'<div>Vol '+fmtMoney(c.volume)+'</div>':'');
+    tip.style.display='block';
+    const bx=cv.parentElement.getBoundingClientRect();
+    let tx=e.clientX-bx.left+14, ty=e.clientY-bx.top+12;
+    if(tx+tip.offsetWidth>bx.width-6)tx=e.clientX-bx.left-tip.offsetWidth-14;
+    tip.style.left=tx+'px';tip.style.top=ty+'px';});
+  cv.addEventListener('mouseleave',()=>{tip.style.display='none';});
+}
+
+/* ---------- render the whole prediction view ---------- */
+function renderPrediction(pr,data){
+  PRED=pr;
+  const p=data.profile||{};
+  /* banner */
+  const bn=$('pv-banner');bn.className='pv-banner '+pr.verdict.key;
+  $('pv-face').textContent=pr.verdict.face;
+  $('pv-label').textContent=(p.name||data.symbol)+' — '+pr.verdict.label;
+  $('pv-blurb').textContent=pr.verdict.blurb;
+  const setScore=(id,v)=>{$(id).textContent=v.toFixed(0);$(id+'-bar').style.width=v+'%';};
+  setScore('pv-tech',pr.scores.tech);setScore('pv-fund',pr.scores.fund);setScore('pv-comb',pr.scores.combined);
+  /* ELI5 cards */
+  $('eli5-grid').innerHTML=eli5Cards(pr).map(c=>
+    '<div class="eli5"><div class="e-head"><span class="e-emoji">'+c.emoji+'</span>'+
+    '<span class="e-title">'+c.title+'</span><span class="e-tag '+c.tag[0]+'">'+c.tag[1]+'</span></div>'+
+    '<div class="e-body">'+c.body+'</div></div>').join('');
+  /* chart subtitles */
+  $('pchart-sub').textContent='Each candle = one '+(pr.candleTf==='weekly'?'week':'month')+
+    '. Green: the price ended the '+(pr.candleTf==='weekly'?'week':'month')+' higher than it started. Red: lower. Blue line = 21-EMA, gold line = 89-EMA.';
+  $('pchart-note').textContent='Candles are built from official closing prices ('+pr.interval+' feed → '+pr.candleTf+' candles). '+
+    (pr.volumeNote?('Volume is currently '+pr.volumeNote+'. '):'')+
+    'Dashed green = floors (support) · dashed red = ceilings (resistance) · dotted gold = Fibonacci give-back levels.';
+  /* trade plan cards */
+  const PL=pr.plan,P=(n)=>'₨ '+fmtPx(n);
+  $('plan-cards').innerHTML=
+    '<div class="plan-card buy"><div class="k">🟢 Buy zone 1 (first nibble)</div><div class="v">'+P(PL.buy1)+'</div></div>'+
+    '<div class="plan-card buy"><div class="k">🟢 Buy zone 2 (deeper dip)</div><div class="v">'+P(PL.buy2)+'</div></div>'+
+    '<div class="plan-card stop"><div class="k">🛑 Stop-loss (the safety rope)</div><div class="v">'+P(PL.stop)+'</div></div>'+
+    '<div class="plan-card tgt"><div class="k">🎯 Target 1</div><div class="v">'+P(PL.t1)+'</div></div>'+
+    '<div class="plan-card tgt"><div class="k">🎯 Target 2 (if Target 1 breaks)</div><div class="v">'+P(PL.t2)+'</div></div>'+
+    '<div class="plan-card"><div class="k">⚖️ Reward vs risk</div><div class="v">'+PL.rr.toFixed(1)+' : 1</div></div>'+
+    '<div class="plan-note">How the pros use this: buy a first small piece near <b>Buy 1</b>, add near <b>Buy 2</b> if the dip comes, and promise yourself to exit at the <b>stop-loss</b> — no arguing with it. Size the position so that hitting the stop costs only <b>2–3% of your whole portfolio</b>. Book profit into strength at the targets. Levels are estimates, not promises.</div>';
+  /* ladder */
+  const lad=$('plan-ladder');lad.innerHTML='<div class="rail"></div>';
+  const lvs=[['Target 2',PL.t2,'var(--gold)'],['Target 1',PL.t1,'var(--gold)'],['Now',pr.price,'var(--text)'],
+             ['Buy 1',PL.buy1,'var(--bull)'],['Buy 2',PL.buy2,'var(--bull)'],['Stop',PL.stop,'var(--bear)']];
+  const mx=Math.max(...lvs.map(l=>l[1])),mn=Math.min(...lvs.map(l=>l[1])),rg=(mx-mn)||1;
+  lvs.forEach(([k,v,c])=>{const el=document.createElement('div');el.className='plan-stop';
+    el.style.top=(6+((mx-v)/rg)*88)+'%';
+    el.innerHTML='<span class="dot" style="background:'+c+'"></span><span class="lbl" style="color:'+c+'">'+k+'</span><span class="px">'+fmtPx(v)+'</span>';
+    lad.appendChild(el);});
+  /* reasons */
+  $('pv-pros').innerHTML=pr.reasons.pros.map(t=>'<li>'+t+'</li>').join('')||'<li>Nothing strongly positive stood out.</li>';
+  $('pv-cons').innerHTML=pr.reasons.cons.map(t=>'<li>'+t+'</li>').join('')||'<li>No major warning flags right now.</li>';
+  /* charts */
+  requestAnimationFrame(()=>{drawPredCharts();wirePredTooltip();});
+}
+
+/* ---------- prediction flow ---------- */
+const PRED_MSGS=['Reading the trend structure…','Marking floors & ceilings…','Measuring the last rally (Fibonacci)…','Checking the energy meter (RSI)…','Listening to the volumes…','Grading the fundamentals…','Writing the game plan…'];
+async function runPredict(symbol){
+  if(!symbol){toast('Pick a stock first');return;}
+  $('predict-btn').disabled=true;$('analyze-btn').disabled=true;
+  startLoader(symbol);
+  const L=PRED_MSGS;let li=0;$('load-text').textContent=L[0];
+  if(loadTimer)clearInterval(loadTimer);
+  loadTimer=setInterval(()=>{li=(li+1)%L.length;$('load-text').textContent=L[li];},700);
+  try{
+    let data=currentResult&&currentResult.symbol===symbol?currentResult:await getAnalysis(symbol);
+    currentResult=data;
+    const pr=buildPrediction(data);
+    if(pr.error)throw new Error(pr.error);
+    renderPrediction(pr,data);
+    $('empty').style.display='none';
+    $('stage').classList.remove('show');
+    $('pstage').classList.add('show');
+    $('pstage').scrollIntoView({behavior:REDUCED?'auto':'smooth',block:'start'});
+  }catch(err){toast(err.message||'Prediction failed');}
+  finally{stopLoader();$('predict-btn').disabled=false;$('analyze-btn').disabled=false;}
+}
+
+/* wiring (kept self-contained so the existing init() stays untouched) */
+document.addEventListener('DOMContentLoaded',()=>{
+  const pb=$('predict-btn');
+  if(pb)pb.addEventListener('click',()=>{
+    const v=$('stock-input').value.trim().toUpperCase();
+    const sym=selectedSymbol&&selectedSymbol===v?selectedSymbol:v;
+    runPredict(sym);});
+  const tg=$('pv-toggles');
+  if(tg)tg.addEventListener('click',(e)=>{
+    const b=e.target.closest('.pv-tgl');if(!b)return;
+    if(b.dataset.layer){predLayers[b.dataset.layer]=!predLayers[b.dataset.layer];
+      b.classList.toggle('on',predLayers[b.dataset.layer]);}
+    else if(b.dataset.range){predZoom=!predZoom;b.classList.toggle('on',predZoom);}
+    drawPredCharts();});
+  window.addEventListener('resize',()=>{if(PRED&&$('pstage').classList.contains('show'))drawPredCharts();});
+});
+
+/* re-show the analyze stage when Analyze runs after a prediction */
+const _origRunAnalyze=runAnalyze;
+runAnalyze=async function(symbol){
+  await _origRunAnalyze(symbol);
+  if($('stage').classList.contains('show'))$('pstage').classList.remove('show');
+};
 
 /* =================================================================
    INIT

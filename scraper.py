@@ -458,12 +458,26 @@ def scrape_price_history(symbol: str, session) -> List[Dict]:
                 ts, close = row[0], row[1]
                 date = datetime.utcfromtimestamp(int(ts)).date().isoformat() \
                     if str(ts).isdigit() else str(ts)
-                out.append({"date": date, "close": float(close)})
+                pt = {"date": date, "close": float(close)}
+                # PSX EOD rows are [timestamp, close, volume] — keep the
+                # volume when present so the Prediction tab can read it.
+                if len(row) >= 3:
+                    try:
+                        pt["volume"] = float(row[2])
+                    except Exception:
+                        pass
+                out.append(pt)
             elif isinstance(row, dict):
-                out.append({
+                pt = {
                     "date": str(row.get("date") or row.get("time")),
                     "close": float(row.get("close") or row.get("price")),
-                })
+                }
+                if row.get("volume") is not None:
+                    try:
+                        pt["volume"] = float(row["volume"])
+                    except Exception:
+                        pass
+                out.append(pt)
         except Exception:
             continue
 

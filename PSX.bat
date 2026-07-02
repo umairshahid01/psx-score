@@ -76,7 +76,7 @@ REM  3) Pull the latest code from GitHub (every launch)
 REM --------------------------------------------------------------------
 echo.
 echo   [*] Downloading latest version from GitHub...
-set "FILES=config.py utils.py psx_data.py scraper.py scorer.py analyzer.py dashboard.html requirements.txt"
+set "FILES=config.py utils.py psx_data.py scraper.py scorer.py predictor.py analyzer.py dashboard.html requirements.txt"
 set "DL_OK=1"
 
 where curl >nul 2>&1
