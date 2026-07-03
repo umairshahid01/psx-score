@@ -71,13 +71,35 @@ push an update, everyone who runs the `.bat` gets it automatically.
 
 ### Files
 
+## v3.1 — Strict original-data scoring & Technical Analysis chart controls
+
+- **Buttons renamed:** *Analyze* → **Fundamental Analysis**, *Prediction* → **Technical Analysis**.
+- **New 11-metric financial story** (all equally weighted, top-to-bottom):
+  Revenue Growth → Profit Margin → EPS Growth → **ROIC** → ROE → Debt/Equity →
+  Current Ratio → **Cash & Equivalents** → Cash Flow Quality → **Dividend Yield** → **P/E Ratio**.
+  Banks use an adapted 8-metric model with Capital Adequacy.
+- **ZERO-ESTIMATION POLICY:** every figure is scraped from an original source
+  (PSX company page, the company's filed statements via StockAnalysis/S&P Global,
+  or PSX end-of-day prices). ROIC uses the real reported operating profit and the
+  company's actual tax rate — `NOPAT ÷ average invested capital` — never a proxy.
+  If any input is missing, the metric shows **N/A** and the remaining metrics are
+  **re-weighted**; nothing is ever guessed.
+- **Every metric's ⓘ info tab** now shows the exact **formula**, a plain-English
+  explanation of the calculation, and a **clickable link to the source page** so
+  you can verify the numbers yourself.
+- **Technical Analysis candle chart:** mouse-wheel / trackpad-pinch **zoom**
+  (anchored at the cursor), **drag to pan**, **double-click to reset**, and an
+  **⛶ Expand** toggle for a full-height chart.
+
+
+
 | File | Role |
 |------|------|
 | `dashboard.html` | The whole front-end (UI, gauge, charts, animations). Works live or in demo. |
 | `analyzer.py`    | Flask server: serves the dashboard + `/api/analyze`, `/api/stocks`. |
 | `psx_data.py`    | Builds & caches the live PSX stock universe (the auto-updating list). |
 | `scraper.py`     | Scrapes a company's profile, financial tables, price history, and report PDFs. |
-| `scorer.py`      | Pure scoring logic (no network): turns scraped data into the 0–100 score. |
+| `scorer.py`      | Pure scoring logic (no network): 11-metric financial story, strict original-data policy (N/A + re-weighting, never estimation), per-metric source links. |
 | `predictor.py`   | Prediction engine (no network): trend structure, EMAs, S/R, Fibonacci, RSI divergence, trade plan. Mirrored in JS inside the dashboard so DEMO mode behaves identically. |
 | `utils.py`       | Shared helpers: HTTP session, robust number parsing, caching. |
 | `config.py`      | All settings: ports, PSX endpoints, scoring weights, your GitHub details. |

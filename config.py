@@ -83,25 +83,44 @@ ANALYSIS_TTL_MINUTES = 30     # re-scrape a company if its analysis is older tha
 # Banking / insurance use a different model (see scorer.py) because leverage is
 # structural for them.
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Metric weights (v3) — THE FINANCIAL STORY, top to bottom, ALL EQUAL.
+# 1-3  Growth & profitability: sells more → keeps profit → per-share growth
+# 4-5  Capital efficiency: all capital (ROIC) → owners' capital (ROE)
+# 6-8  Balance-sheet safety: leverage → liquidity → cash on hand
+# 9    Earnings quality: is the profit real cash?
+# 10   Shareholder reward: dividend yield
+# 11   Price tag: what the market charges for it all (P/E)
+# STRICT v3 POLICY: a metric with no original data shows N/A and the rest
+# are re-weighted — nothing is ever estimated.
+# -----------------------------------------------------------------------------
 WEIGHTS_GENERAL = {
+    "revenue_growth":   1/11,
+    "profit_margin":    1/11,
+    "eps_growth":       1/11,
+    "roic":             1/11,
+    "roe":              1/11,
+    "debt_to_equity":   1/11,
+    "current_ratio":    1/11,
+    "cce":              1/11,
+    "cashflow_quality": 1/11,
+    "dividend_yield":   1/11,
+    "pe_ratio":         1/11,
+}
+
+# Banks / insurers / leasing: ROIC, D/E, current ratio and CCE are
+# structurally meaningless for a financial balance sheet (deposits ARE the
+# business), so the regulator's capital adequacy ratio stands in for the
+# safety block. Same story, 8 equal weights.
+WEIGHTS_BANKING = {
     "revenue_growth":   1/8,
     "profit_margin":    1/8,
     "eps_growth":       1/8,
-    "debt_to_equity":   1/8,
     "roe":              1/8,
-    "current_ratio":    1/8,
+    "capital_adequacy": 1/8,
     "cashflow_quality": 1/8,
-    "dividend":         1/8,
-}
-
-WEIGHTS_BANKING = {
-    "revenue_growth":   1/7,
-    "profit_margin":    1/7,
-    "eps_growth":       1/7,
-    "roe":              1/7,
-    "capital_adequacy": 1/7,
-    "cashflow_quality": 1/7,
-    "dividend":         1/7,
+    "dividend_yield":   1/8,
+    "pe_ratio":         1/8,
 }
 
 # Sectors that should use the banking / financial model.

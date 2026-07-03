@@ -70,6 +70,20 @@ LINE_ITEMS = {
         r"cash flows? from operating activities",
         r"operating activities",
     ],
+    # v3 — needed for ROIC (real NOPAT) and CCE. Order matters:
+    # profit_before_tax must be tested before income_tax so that
+    # "profit before taxation" never matches the bare-tax patterns.
+    "profit_before_tax": [
+        r"profit before tax", r"pre.?tax profit", r"profit / \(loss\) before tax",
+    ],
+    "income_tax": [
+        r"^\s*taxation\s*$", r"income tax", r"provision for tax", r"tax expense",
+        r"^\s*tax\s*$",
+    ],
+    "cash": [
+        r"cash and cash equivalents", r"cash and bank balances",
+        r"cash & cash equivalents", r"cash at bank",
+    ],
     "dividend_per_share": [
         r"dividend per share", r"cash dividend", r"interim dividend",
         r"final dividend", r"\bdps\b", r"total dividend",
@@ -309,9 +323,19 @@ def scrape_financial_tables(symbol: str, session) -> List[Dict]:
 
 def _gap_fill_record(rec: Dict, profile: Dict = None) -> None:
     """
-    Fill every missing field using accounting identities and — when available —
-    real financial ratios scraped from the PSX profile section. Falls back to
-    conservative industry proxies only as a last resort.
+    v3 — STRICT ORIGINAL-DATA POLICY.
+
+    Only EXACT accounting identities are applied (pure arithmetic on figures
+    that were actually scraped from the company's own statements):
+
+        liabilities = assets − equity        equity = assets − liabilities
+        assets      = equity + liabilities
+        equity      = book value/share × shares (both scraped)
+        eps         = net profit ÷ shares outstanding (both scraped)
+
+    NO approximations, NO sector proxies, NO percentage-of-total guesses.
+    Anything that cannot be computed exactly stays None and the scorer will
+    show it as N/A and re-weight the remaining metrics.
     """
     yr = rec.get("year", "?")
     src = rec.setdefault("_sources", {})
@@ -322,73 +346,32 @@ def _gap_fill_record(rec: Dict, profile: Dict = None) -> None:
             rec[field] = value
             src[field] = reason
 
-    # ---- balance sheet identities ----
+    # ---- balance sheet identities (exact) ----
     _set("total_liabilities",
          _sub(rec.get("total_assets"), rec.get("total_equity")),
-         f"derived: assets − equity (FY{yr})")
+         f"identity: assets − equity (FY{yr})")
     _set("total_equity",
          _sub(rec.get("total_assets"), rec.get("total_liabilities")),
-         f"derived: assets − liabilities (FY{yr})")
+         f"identity: assets − liabilities (FY{yr})")
     _set("total_assets",
          _add(rec.get("total_equity"), rec.get("total_liabilities")),
-         f"derived: equity + liabilities (FY{yr})")
+         f"identity: equity + liabilities (FY{yr})")
 
-    # ---- total_equity from book_value × shares ----
+    # ---- total_equity from book_value × shares (both real, exact) ----
     if rec.get("total_equity") is None:
         bv = p.get("book_value")
         sh = p.get("shares")
         if bv and sh and bv > 0 and sh > 0:
             _set("total_equity", bv * sh,
-                 f"derived: book value Rs{bv:.1f} × {sh:.0f} shares")
+                 f"identity: book value Rs{bv:.1f} × {sh:.0f} shares")
 
-    # ---- total_debt: from profile D/E ratio × equity, else proxy ----
-    if rec.get("total_debt") is None:
-        de = p.get("debt_to_equity_profile")
-        eq = rec.get("total_equity")
-        if de is not None and eq:
-            _set("total_debt", de * eq,
-                 f"derived: D/E {de:.2f} × equity (profile ratio, FY{yr})")
-        elif rec.get("total_liabilities") is not None:
-            _set("total_debt", rec["total_liabilities"] * 0.7,
-                 f"estimated ~70% of total liabilities as debt (FY{yr})")
-
-    # ---- current assets / liabilities: from profile current ratio, else proxy ----
-    ta = rec.get("total_assets")
-    tl = rec.get("total_liabilities")
-    cr_profile = p.get("current_ratio_profile")
-    if rec.get("current_assets") is None and ta is not None:
-        pct_ca = 0.40  # default
-        if cr_profile and cr_profile > 0 and tl:
-            # estimate current_liabilities first, then current_assets
-            est_cl = tl * 0.55
-            est_ca = cr_profile * est_cl
-            if est_ca <= ta:
-                _set("current_assets", est_ca,
-                     f"derived: CR {cr_profile:.2f} × est. CL (profile ratio, FY{yr})")
-                _set("current_liabilities", est_cl,
-                     f"estimated ~55% of total liabilities (FY{yr})")
-            else:
-                _set("current_assets", ta * pct_ca,
-                     f"estimated ~40% of total assets (FY{yr})")
-        else:
-            _set("current_assets", ta * pct_ca,
-                 f"estimated ~40% of total assets (FY{yr})")
-    if rec.get("current_liabilities") is None and tl is not None:
-        _set("current_liabilities", tl * 0.55,
-             f"estimated ~55% of total liabilities (FY{yr})")
-
-    # ---- operating cashflow: estimate from net_profit when missing ----
-    if rec.get("operating_cashflow") is None and rec.get("net_profit") is not None:
-        _set("operating_cashflow", rec["net_profit"] * 0.90,
-             f"estimated ~90% of net profit (FY{yr}, no CF data)")
-
-    # ---- EPS: derive from net_profit and shares_outstanding if available ----
+    # ---- EPS: exact derivation from net_profit ÷ shares ----
     if rec.get("eps") is None:
         np_ = rec.get("net_profit")
         sh  = rec.get("shares_outstanding") or p.get("shares")
         if np_ is not None and sh is not None and sh > 0:
             _set("eps", np_ / sh,
-                 f"derived: net profit / shares (FY{yr})")
+                 f"identity: net profit ÷ shares (FY{yr})")
 
     # ---- dividend: do NOT default to 0 here ----
     # The dedicated scrape_dividends() pass fills this in.
@@ -720,6 +703,104 @@ def scrape_stockanalysis(symbol: str, session) -> Dict:
     return data
 
 
+# ---------------------------------------------------------------------------
+# StockAnalysis annual statements (v3)
+# ---------------------------------------------------------------------------
+# Multi-year, as-filed line items needed for a REAL (never estimated) ROIC:
+#   NOPAT            = Operating Income × (1 − Income Tax ÷ Pretax Income)
+#   Invested Capital = Total Debt + Shareholders' Equity  (averaged, 2 yrs)
+# plus Cash & Equivalents / Total Assets for the CCE metric.
+# All figures on these pages are the company's own reported statements as
+# aggregated by S&P Global — original data, no derivation.
+
+_SA_INCOME_URL  = "https://stockanalysis.com/quote/psx/{symbol}/financials/"
+_SA_BALANCE_URL = "https://stockanalysis.com/quote/psx/{symbol}/financials/balance-sheet/"
+
+_SA_STMT_MAP = {
+    # income statement
+    "revenue":                 "revenue",
+    "operating income":        "operating_profit",
+    "pretax income":           "profit_before_tax",
+    "income tax":              "income_tax",
+    "net income":              "net_profit",
+    "eps (basic)":             "eps",
+    "eps (diluted)":           "eps_diluted",
+    # balance sheet
+    "cash & equivalents":      "cash",
+    "cash & cash equivalents": "cash",
+    "total debt":              "total_debt",
+    "shareholders' equity":    "total_equity",
+    "total assets":            "total_assets",
+    "total liabilities":       "total_liabilities",
+    "working capital":         "working_capital",
+    "book value per share":    "book_value",
+}
+
+_FY_COL_RE = re.compile(r"(?:FY\s*)?((?:19|20)\d{2})")
+
+
+def _parse_sa_statement_table(soup, out: Dict[int, Dict]) -> int:
+    """Parse an SA financials table: header row = fiscal years, rows = items."""
+    parsed = 0
+    for table in soup.find_all("table"):
+        header = table.find("tr")
+        if not header:
+            continue
+        cols = header.find_all(["th", "td"])
+        year_by_col: Dict[int, int] = {}
+        for ci, cell in enumerate(cols):
+            m = _FY_COL_RE.search(_text(cell))
+            if m:
+                year_by_col[ci] = int(m.group(1))
+        if not year_by_col:
+            continue
+        for row in table.find_all("tr")[1:]:
+            cells = row.find_all(["td", "th"])
+            if len(cells) < 2:
+                continue
+            label = _text(cells[0]).lower().strip()
+            field = _SA_STMT_MAP.get(label)
+            if not field:
+                continue
+            for ci, year in year_by_col.items():
+                if ci >= len(cells):
+                    continue
+                raw = _text(cells[ci])
+                if not raw or raw in ("-", "—", "n/a", "N/A", "Upgrade"):
+                    continue
+                num = utils.to_number(raw.replace("%", ""))
+                if num is None:
+                    continue
+                rec = out.setdefault(year, {"year": year})
+                if field not in rec:
+                    rec[field] = num
+                    parsed += 1
+    return parsed
+
+
+def scrape_sa_statements(symbol: str, session) -> Dict[int, Dict]:
+    """
+    Fetch multi-year annual statements from StockAnalysis (income statement +
+    balance sheet). Returns {year: {field: value}} with a consistent scale
+    within the source, so any ratio computed purely inside this dataset
+    (ROIC, cash/assets, margins, growth) uses original figures only.
+    Never raises — returns {} on any failure.
+    """
+    out: Dict[int, Dict] = {}
+    for url in (_SA_INCOME_URL.format(symbol=symbol),
+                _SA_BALANCE_URL.format(symbol=symbol)):
+        try:
+            html = utils.fetch(url, session=session)
+            if not html:
+                print(f"  [SA-STMT] no HTML from {url}")
+                continue
+            n = _parse_sa_statement_table(BeautifulSoup(html, "lxml"), out)
+            print(f"  [SA-STMT] {url.rsplit('/quote/',1)[-1]}: {n} values")
+        except Exception as exc:  # noqa: BLE001
+            print(f"  [SA-STMT] failed {url}: {exc}")
+    return out
+
+
 def _merge_secondary_data(financials: List[Dict], profile: Dict,
                           sa_data: Dict, warnings: List[str]) -> None:
     """Merge StockAnalysis.com data into the financial records and profile."""
@@ -1037,6 +1118,9 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
     sa_data = scrape_stockanalysis(symbol, session)
     _merge_secondary_data(financials, profile, sa_data, warnings)
 
+    # --- v3: multi-year as-filed statements (real ROIC / CCE inputs) ---
+    sa_statements = scrape_sa_statements(symbol, session)
+
     # Final gap-fill pass on every record (with profile ratios)
     for rec in financials:
         _gap_fill_record(rec, profile=profile)
@@ -1078,6 +1162,14 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
         "data_quality": quality,
         "scraped_at": scraped_at,
         "sa_data": sa_data,   # StockAnalysis ratios for the scorer
+        "sa_statements": sa_statements,   # v3: {year: {field: value}} as-filed
+        "source_urls": {                  # v3: clickable references per source
+            "psx":          config.PSX_COMPANY_URL.format(symbol=symbol),
+            "sa_stats":     _SA_URL.format(symbol=symbol),
+            "sa_income":    _SA_INCOME_URL.format(symbol=symbol),
+            "sa_balance":   _SA_BALANCE_URL.format(symbol=symbol),
+            "sa_dividend":  _SA_DIV_URL.format(symbol=symbol),
+        },
     }
 
 

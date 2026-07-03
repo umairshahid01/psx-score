@@ -1,12 +1,41 @@
 """
-scorer.py
-=========
+scorer.py  (v3)
+===============
 Turns a scrape (see scraper.py) into a 0-100 fundamental score with a
 transparent, per-metric breakdown.
 
-Every metric always produces a display value — never N/A or blank.
-When real data is unavailable, a clearly-labelled estimate is used and
-the metric is flagged estimated=True so the UI can mark it with *.
+STRICT ORIGINAL-DATA POLICY (v3)
+--------------------------------
+Every metric is computed ONLY from figures scraped from original sources:
+the PSX company page (dps.psx.com.pk), the company's own filed statements
+as aggregated by StockAnalysis/S&P Global, or the PSX end-of-day feed.
+
+* NO sector proxies. NO "assume 70% of liabilities is debt". NO estimates.
+* If the real inputs for a metric are missing, the metric shows N/A,
+  contributes nothing, and the remaining metrics are RE-WEIGHTED so the
+  score still spans 0-100.
+* Exact arithmetic on original figures (e.g. NP ÷ revenue, CAGR of a real
+  series, assets − equity) is calculation, not estimation, and is allowed.
+* Every metric carries a clickable `source_url` pointing at the page the
+  underlying numbers came from, so the user can verify it themselves.
+
+THE FINANCIAL STORY (metric order, equal weights)
+-------------------------------------------------
+ 1. Revenue Growth      — is the company selling more?
+ 2. Profit Margin       — how much of each rupee does it keep?
+ 3. EPS Growth          — is the profit per share growing?
+ 4. ROIC                — how well does it use ALL its capital?  (NOPAT ÷ avg invested capital)
+ 5. Return on Equity    — how well does it use the owners' capital?
+ 6. Debt / Equity       — how much of the business is borrowed?
+ 7. Current Ratio       — can it pay the bills due soon?
+ 8. Cash & Equivalents  — how much actual cash is on hand?
+ 9. Cash Flow Quality   — is the reported profit backed by real cash?
+10. Dividend Yield      — how much cash does it hand back, vs the price?
+11. P/E Ratio           — what does the market charge for those earnings?
+
+Banks/financials use an adapted 8-metric model (ROIC, D/E, current ratio and
+CCE are structurally meaningless for a bank's balance sheet) with capital
+adequacy in their place — also equally weighted.
 """
 
 from __future__ import annotations
@@ -20,33 +49,29 @@ Status = str  # "good" | "warn" | "bad" | "na"
 
 
 # ---------------------------------------------------------------------------
-# Generic 0-10 scorers
+# Generic 0-10 scorers  (None in → None out: no data is never scored)
 # ---------------------------------------------------------------------------
 
 def _clamp10(x: float) -> float:
     return max(0.0, min(10.0, x))
 
 
-def higher_better(value: Optional[float], low: float, high: float) -> float:
-    if value is None:
-        return 5.0  # neutral mid-point when data absent
-    if high == low:
-        return 5.0
+def higher_better(value: Optional[float], low: float, high: float) -> Optional[float]:
+    if value is None or high == low:
+        return None
     return _clamp10((value - low) / (high - low) * 10.0)
 
 
-def lower_better(value: Optional[float], best: float, worst: float) -> float:
-    if value is None:
-        return 5.0
-    if worst == best:
-        return 5.0
+def lower_better(value: Optional[float], best: float, worst: float) -> Optional[float]:
+    if value is None or worst == best:
+        return None
     return _clamp10((worst - value) / (worst - best) * 10.0)
 
 
 def band_better(value: Optional[float], lo_bad: float, lo_good: float,
-                hi_good: float, hi_bad: float) -> float:
+                hi_good: float, hi_bad: float) -> Optional[float]:
     if value is None:
-        return 5.0
+        return None
     if value < lo_good:
         return higher_better(value, lo_bad, lo_good)
     if value > hi_good:
@@ -54,9 +79,9 @@ def band_better(value: Optional[float], lo_bad: float, lo_good: float,
     return 10.0
 
 
-def _status(subscore: float, estimated: bool = False) -> Status:
-    if estimated and subscore == 5.0:
-        return "warn"  # neutral estimate → amber
+def _status(subscore: Optional[float]) -> Status:
+    if subscore is None:
+        return "na"
     if subscore >= 7:
         return "good"
     if subscore >= 4:
@@ -65,7 +90,7 @@ def _status(subscore: float, estimated: bool = False) -> Status:
 
 
 # ---------------------------------------------------------------------------
-# Pull tidy series from financials
+# Tidy series helpers (PSX financial records)
 # ---------------------------------------------------------------------------
 
 def _series(financials: List[Dict], field: str) -> List[Tuple[int, float]]:
@@ -85,10 +110,11 @@ def _latest_year(financials: List[Dict], field: str) -> Optional[int]:
     return s[-1][0] if s else None
 
 
-def _growth(financials: List[Dict], field: str, years: int) -> Optional[float]:
+def _growth(financials: List[Dict], field: str, years: int) -> Tuple[Optional[float], str]:
+    """CAGR over ~`years` using ONLY real points; returns (growth, 'FYa–FYb')."""
     s = _series(financials, field)
     if len(s) < 2:
-        return None
+        return None, ""
     last_year, last_val = s[-1]
     target_year = last_year - years
     base = min(s, key=lambda t: abs(t[0] - target_year))
@@ -97,354 +123,329 @@ def _growth(financials: List[Dict], field: str, years: int) -> Optional[float]:
         base = s[0]
         span = last_year - base[0]
     if span <= 0:
-        return None
-    return utils.cagr(base[1], last_val, span)
+        return None, ""
+    g = utils.cagr(base[1], last_val, span)
+    return g, f"FY{base[0]}–FY{last_year}"
 
 
-def _growth_years_used(financials: List[Dict], field: str, years: int) -> str:
-    s = _series(financials, field)
-    if len(s) < 2:
-        return ""
-    last_year = s[-1][0]
-    target_year = last_year - years
-    base = min(s, key=lambda t: abs(t[0] - target_year))
-    return f"FY{base[0]}–FY{last_year}"
+def _stmt_series(stmts: Dict[int, Dict], field: str) -> List[Tuple[int, float]]:
+    out = [(y, r[field]) for y, r in (stmts or {}).items()
+           if r.get(field) is not None]
+    out.sort(key=lambda t: t[0])
+    return out
 
 
 # ---------------------------------------------------------------------------
 # Format helpers
 # ---------------------------------------------------------------------------
 
-def _fmt_pct(v: float, estimated: bool = False) -> str:
-    suffix = " *" if estimated else ""
-    return f"{v:.1f}%{suffix}"
+def _fmt_pct(v: float) -> str:
+    return f"{v:.1f}%"
 
 
-def _fmt_ratio(v: float, estimated: bool = False) -> str:
-    suffix = " *" if estimated else ""
-    return f"{v:.2f}x{suffix}"
+def _fmt_ratio(v: float) -> str:
+    return f"{v:.2f}x"
+
+
+_NA = (None, None, "N/A", "Original data unavailable", "", None)
+
+
+def _na(note: str, src_label: str = "", src_url: Optional[str] = None):
+    return None, None, "N/A", note, src_label, src_url
 
 
 # ---------------------------------------------------------------------------
 # Metric functions
-# Each returns: (subscore 0-10, raw value, display str, note, source_note, estimated)
-# subscore and raw value are ALWAYS a number — never None.
+# Each returns: (subscore|None, value, display, note, source_label, source_url)
+# subscore None ⇒ metric excluded from the score and re-weighted away.
 # ---------------------------------------------------------------------------
 
-# Sector-level typical growth used when company-specific data is absent
-_SECTOR_GROWTH_PROXY = 8.0     # % — conservative PSX mid-market
-_SECTOR_MARGIN_PROXY = 10.0    # %
-_SECTOR_ROE_PROXY    = 12.0    # %
-_SECTOR_DE_PROXY     = 1.0     # ratio
-_SECTOR_CR_PROXY     = 1.3     # ratio
-_SECTOR_CF_PROXY     = 0.85    # ratio
-
-
-def m_revenue_growth(fin, banking=False, sa=None):
+def m_revenue_growth(fin, banking, sa, ctx):
     field = "net_interest_income" if banking else "revenue"
-    g = (_growth(fin, field, 3) or _growth(fin, "revenue", 3))
-    yr_range = (_growth_years_used(fin, field, 3) or _growth_years_used(fin, "revenue", 3))
-    estimated = False
-
+    g, rng = _growth(fin, field, 3)
+    if g is None and banking:
+        g, rng = _growth(fin, "revenue", 3)
+    src_url = ctx["urls"].get("psx")
+    if g is None:                          # try the as-filed SA statements
+        stmts = ctx.get("stmts") or {}
+        recs = [dict(year=y, revenue=v) for y, v in _stmt_series(stmts, "revenue")]
+        g, rng = _growth(recs, "revenue", 3)
+        src_url = ctx["urls"].get("sa_income")
     if g is None:
-        g = (_growth(fin, field, 2) or _growth(fin, "revenue", 2) or
-             _growth(fin, field, 1) or _growth(fin, "revenue", 1))
-        yr_range = (_growth_years_used(fin, field, 2) or _growth_years_used(fin, "revenue", 2))
-        estimated = g is not None
-
-    if g is None:
-        g = _SECTOR_GROWTH_PROXY
-        estimated = True
-        yr_range = ""
-
+        return _na("Needs ≥2 years of reported revenue",
+                   "No multi-year revenue found", ctx["urls"].get("psx"))
     sub = higher_better(g, -10, 18)
-    note = "3-yr revenue CAGR" if not banking else "3-yr core-income CAGR"
-    if estimated:
-        note = "Revenue CAGR (estimated — limited history) *"
-    src = f"Source: {yr_range}" if yr_range else "Sector proxy (no history)"
-    return sub, g, _fmt_pct(g, estimated), note, src, estimated
+    note = "Core-income CAGR" if banking else "Revenue CAGR"
+    return sub, g, _fmt_pct(g), f"{note} ({rng})", f"Reported statements, {rng}", src_url
 
 
-def m_profit_margin(fin, banking=False, sa=None):
+def m_profit_margin(fin, banking, sa, ctx):
     rev = _latest(fin, "revenue") or _latest(fin, "net_interest_income")
     np_ = _latest(fin, "net_profit")
-    m = utils.pct(np_, rev)
-    estimated = False
-
-    if m is None and np_ is not None:
-        ta = _latest(fin, "total_assets")
-        if ta:
-            m = utils.pct(np_, ta)
-            estimated = True
-
-    if m is None:
-        m = _SECTOR_MARGIN_PROXY
-        estimated = True
-
     yr = _latest_year(fin, "net_profit")
-    sub = higher_better(m, 2, 22 if not banking else 28)
-    note = "Net profit margin"
-    if estimated:
-        note = "Return on assets proxy *" if np_ is not None else "Sector proxy *"
-    src = f"FY{yr}" if yr else "Sector estimate"
-    return sub, m, _fmt_pct(m, estimated), note, src, estimated
+    src_url = ctx["urls"].get("psx")
+    if rev is None or np_ is None:
+        stmts = ctx.get("stmts") or {}
+        rs, ns = _stmt_series(stmts, "revenue"), _stmt_series(stmts, "net_profit")
+        if rs and ns and rs[-1][0] == ns[-1][0]:      # same fiscal year only
+            rev, np_, yr = rs[-1][1], ns[-1][1], ns[-1][0]
+            src_url = ctx["urls"].get("sa_income")
+    m = utils.pct(np_, rev)
+    if m is None:
+        return _na("Needs reported revenue and net profit for the same year",
+                   "Income statement not found", ctx["urls"].get("psx"))
+    sub = higher_better(m, 2, 28 if banking else 22)
+    return sub, m, _fmt_pct(m), f"Net profit ÷ revenue (FY{yr})", f"FY{yr} income statement", src_url
 
 
-def m_eps_growth(fin, banking=False, sa=None):
-    g = _growth(fin, "eps", 3)
-    yr_range = _growth_years_used(fin, "eps", 3)
-    estimated = False
-
+def m_eps_growth(fin, banking, sa, ctx):
+    g, rng = _growth(fin, "eps", 3)
+    src_url = ctx["urls"].get("psx")
     if g is None:
-        g = _growth(fin, "eps", 2) or _growth(fin, "eps", 1)
-        yr_range = _growth_years_used(fin, "eps", 2)
-        estimated = g is not None
-
+        stmts = ctx.get("stmts") or {}
+        recs = [dict(year=y, eps=v) for y, v in _stmt_series(stmts, "eps")]
+        g, rng = _growth(recs, "eps", 3)
+        src_url = ctx["urls"].get("sa_income")
     if g is None:
-        # Derive from net_profit growth as proxy
-        g = _growth(fin, "net_profit", 3) or _growth(fin, "net_profit", 2)
-        yr_range = _growth_years_used(fin, "net_profit", 3) or \
-                   _growth_years_used(fin, "net_profit", 2)
-        estimated = g is not None
-        if g is not None:
-            yr_range = yr_range  # keep range
-
-    if g is None:
-        g = _SECTOR_GROWTH_PROXY
-        estimated = True
-        yr_range = ""
-
+        return _na("Needs ≥2 years of reported EPS",
+                   "No multi-year EPS found", ctx["urls"].get("psx"))
     sub = higher_better(g, -10, 18)
-    note = "3-yr EPS CAGR"
-    if estimated:
-        note = "EPS CAGR (proxy from net profit) *" if yr_range else "Sector proxy *"
-    src = f"Source: {yr_range}" if yr_range else "Sector estimate"
-    return sub, g, _fmt_pct(g, estimated), note, src, estimated
+    return sub, g, _fmt_pct(g), f"EPS CAGR ({rng})", f"Reported statements, {rng}", src_url
 
 
-def m_debt_to_equity(fin, banking=False, sa=None):
-    sa = sa or {}
-    # Prefer StockAnalysis direct ratio (real, not derived)
-    if sa.get("debt_to_equity") is not None:
-        de = sa["debt_to_equity"]
-        sub = lower_better(de, 0.4, 2.0)
-        return (sub, de, _fmt_ratio(de, False),
-                "Debt-to-equity (lower is better)",
-                "StockAnalysis (S&P Global)", False)
-
-    debt = _latest(fin, "total_debt")
-    eq   = _latest(fin, "total_equity")
-    estimated = False
-
-    if debt is None:
-        tl = _latest(fin, "total_liabilities")
-        if tl is not None:
-            debt = tl * 0.70   # conservative: 70 % of liabilities as debt
-            estimated = True
-
-    if eq is None or debt is None:
-        # Both sides missing — use sector proxy
-        de = _SECTOR_DE_PROXY
-        estimated = True
-        sub = lower_better(de, 0.4, 2.0)
-        yr_d = yr_e = None
-        note = "Liabilities-to-equity (sector proxy) *"
-        src = "Sector estimate"
-        return sub, de, _fmt_ratio(de, True), note, src, True
-
-    de = debt / eq if eq != 0 else _SECTOR_DE_PROXY
-    yr_d = _latest_year(fin, "total_debt") or _latest_year(fin, "total_liabilities")
-    yr_e = _latest_year(fin, "total_equity")
-
-    sub = lower_better(de, 0.4, 2.0)
-    note = "Debt-to-equity (lower is better)"
-    if estimated:
-        note = "Liabilities-to-equity (debt detail unavailable) *"
-    src = f"FY{yr_d}/{yr_e}" if yr_d and yr_e else "Latest available"
-    return sub, de, _fmt_ratio(de, estimated), note, src, estimated
+def _roic_from(recs_by_year: Dict[int, Dict]) -> Optional[Tuple[float, int, float]]:
+    """
+    ROIC from one consistent dataset (never mixes sources/scales):
+      NOPAT_t = operating_profit_t × (1 − income_tax_t ÷ profit_before_tax_t)
+      IC_t    = total_debt_t + total_equity_t
+      ROIC    = NOPAT_t ÷ average(IC_t, IC_{t-1})
+    Requires every input to be a real reported figure. Returns
+    (roic_pct, year, tax_rate) or None.
+    """
+    years = sorted(y for y, r in recs_by_year.items() if r)
+    for t in reversed(years):                      # newest year with full data
+        r = recs_by_year.get(t) or {}
+        op, pbt, tax = r.get("operating_profit"), r.get("profit_before_tax"), r.get("income_tax")
+        d1, e1 = r.get("total_debt"), r.get("total_equity")
+        prev = recs_by_year.get(t - 1) or {}
+        d0, e0 = prev.get("total_debt"), prev.get("total_equity")
+        if None in (op, pbt, tax, d1, e1, d0, e0):
+            continue
+        if pbt <= 0 or op <= 0:
+            continue
+        tax_rate = max(0.0, min(0.60, abs(tax) / pbt))
+        nopat = op * (1 - tax_rate)
+        ic_avg = ((d1 + e1) + (d0 + e0)) / 2.0
+        if ic_avg <= 0:
+            continue
+        return nopat / ic_avg * 100.0, t, tax_rate * 100.0
+    return None
 
 
-def m_roe(fin, banking=False, sa=None):
-    sa = sa or {}
-    # Prefer StockAnalysis direct ROE %
+def m_roic(fin, banking, sa, ctx):
+    # dataset 1: PSX financial records (as parsed from the company's tables)
+    psx = {r["year"]: r for r in fin if r.get("year") is not None}
+    got = _roic_from(psx)
+    src_label, src_url = "PSX company financials", ctx["urls"].get("psx")
+    if got is None:                                # dataset 2: SA statements
+        got = _roic_from(ctx.get("stmts") or {})
+        src_label, src_url = ("StockAnalysis annual statements (S&P Global)",
+                              ctx["urls"].get("sa_balance"))
+    if got is None:
+        return _na("Needs reported operating profit, tax, debt & equity for "
+                   "2 consecutive years — no estimation is ever used",
+                   "Complete statement set not found", ctx["urls"].get("sa_income"))
+    roic, yr, trate = got
+    sub = higher_better(roic, 4, 20)
+    note = f"NOPAT ÷ avg invested capital (FY{yr}, tax {trate:.0f}%)"
+    return sub, roic, _fmt_pct(roic), note, f"FY{yr - 1}–FY{yr} {src_label}", src_url
+
+
+def m_roe(fin, banking, sa, ctx):
     if sa.get("roe_pct") is not None:
         roe = sa["roe_pct"]
-        sub = higher_better(roe, 5, 22)
-        return (sub, roe, _fmt_pct(roe, False), "Return on equity",
-                "StockAnalysis (S&P Global)", False)
-
-    np_ = _latest(fin, "net_profit")
-    eq  = _latest(fin, "total_equity")
-    roe = utils.pct(np_, eq)
-    estimated = False
-
-    if roe is None:
-        roe = _SECTOR_ROE_PROXY
-        estimated = True
-
+        return (higher_better(roe, 5, 22), roe, _fmt_pct(roe),
+                "Net profit ÷ shareholders' equity",
+                "StockAnalysis statistics (S&P Global)", ctx["urls"].get("sa_stats"))
+    np_, eq = _latest(fin, "net_profit"), _latest(fin, "total_equity")
     yr = _latest_year(fin, "net_profit")
-    sub = higher_better(roe, 5, 22)
-    note = "Return on equity"
-    if estimated:
-        note = "Return on equity (sector proxy) *"
-    src = f"FY{yr}" if yr else "Sector estimate"
-    return sub, roe, _fmt_pct(roe, estimated), note, src, estimated
+    roe = utils.pct(np_, eq)
+    if roe is None:
+        stmts = ctx.get("stmts") or {}
+        ns, es = _stmt_series(stmts, "net_profit"), _stmt_series(stmts, "total_equity")
+        if ns and es and ns[-1][0] == es[-1][0]:
+            roe, yr = utils.pct(ns[-1][1], es[-1][1]), ns[-1][0]
+            if roe is not None:
+                return (higher_better(roe, 5, 22), roe, _fmt_pct(roe),
+                        f"Net profit ÷ equity (FY{yr})",
+                        f"FY{yr} statements", ctx["urls"].get("sa_balance"))
+        return _na("Needs reported net profit and equity",
+                   "Not found in any source", ctx["urls"].get("psx"))
+    return (higher_better(roe, 5, 22), roe, _fmt_pct(roe),
+            f"Net profit ÷ equity (FY{yr})", f"FY{yr} PSX financials",
+            ctx["urls"].get("psx"))
 
 
-def m_current_ratio(fin, banking=False, sa=None):
-    sa = sa or {}
-    # Prefer StockAnalysis direct current ratio
+def m_debt_to_equity(fin, banking, sa, ctx):
+    if sa.get("debt_to_equity") is not None:
+        de = sa["debt_to_equity"]
+        return (lower_better(de, 0.4, 2.0), de, _fmt_ratio(de),
+                "Total debt ÷ shareholders' equity",
+                "StockAnalysis statistics (S&P Global)", ctx["urls"].get("sa_stats"))
+    debt, eq = _latest(fin, "total_debt"), _latest(fin, "total_equity")
+    yr = _latest_year(fin, "total_debt")
+    if debt is None or eq in (None, 0):
+        stmts = ctx.get("stmts") or {}
+        ds, es = _stmt_series(stmts, "total_debt"), _stmt_series(stmts, "total_equity")
+        if ds and es and ds[-1][0] == es[-1][0] and es[-1][1]:
+            de, yr = ds[-1][1] / es[-1][1], ds[-1][0]
+            return (lower_better(de, 0.4, 2.0), de, _fmt_ratio(de),
+                    f"Total debt ÷ equity (FY{yr})",
+                    f"FY{yr} balance sheet", ctx["urls"].get("sa_balance"))
+        return _na("Needs reported total debt and equity",
+                   "Debt figure not found", ctx["urls"].get("psx"))
+    de = debt / eq
+    return (lower_better(de, 0.4, 2.0), de, _fmt_ratio(de),
+            f"Total debt ÷ equity (FY{yr})", f"FY{yr} PSX financials",
+            ctx["urls"].get("psx"))
+
+
+def m_current_ratio(fin, banking, sa, ctx):
     if sa.get("current_ratio") is not None:
         cr = sa["current_ratio"]
-        sub = band_better(cr, 0.8, 1.5, 3.0, 5.0)
-        return (sub, cr, _fmt_ratio(cr, False), "Current ratio (liquidity)",
-                "StockAnalysis (S&P Global)", False)
-
-    ca = _latest(fin, "current_assets")
-    cl = _latest(fin, "current_liabilities")
-    estimated = False
-
-    if ca is None:
-        ta = _latest(fin, "total_assets")
-        if ta is not None:
-            ca = ta * 0.40
-            estimated = True
-
-    if cl is None:
-        tl = _latest(fin, "total_liabilities")
-        if tl is not None:
-            cl = tl * 0.55
-            estimated = True
-
-    if ca is None or cl is None or cl == 0:
-        cr = _SECTOR_CR_PROXY
-        estimated = True
-    else:
-        cr = ca / cl
-
-    yr = (_latest_year(fin, "current_assets") or
-          _latest_year(fin, "total_assets"))
-    sub = band_better(cr, 0.8, 1.5, 3.0, 5.0)
-    note = "Current ratio (liquidity)"
-    if estimated:
-        note = "Estimated current ratio *"
-    src = f"FY{yr}" if yr else "Sector estimate"
-    return sub, cr, _fmt_ratio(cr, estimated), note, src, estimated
+        return (band_better(cr, 0.8, 1.5, 3.0, 5.0), cr, _fmt_ratio(cr),
+                "Current assets ÷ current liabilities",
+                "StockAnalysis statistics (S&P Global)", ctx["urls"].get("sa_stats"))
+    ca, cl = _latest(fin, "current_assets"), _latest(fin, "current_liabilities")
+    yr = _latest_year(fin, "current_assets")
+    if ca is None or cl in (None, 0):
+        return _na("Needs reported current assets and current liabilities",
+                   "Not found in any source", ctx["urls"].get("psx"))
+    cr = ca / cl
+    return (band_better(cr, 0.8, 1.5, 3.0, 5.0), cr, _fmt_ratio(cr),
+            f"Current assets ÷ current liabilities (FY{yr})",
+            f"FY{yr} PSX financials", ctx["urls"].get("psx"))
 
 
-def m_cashflow_quality(fin, banking=False, sa=None):
-    sa = sa or {}
-    # Prefer StockAnalysis direct OCF & net income (real values)
-    sa_ocf = sa.get("operating_cashflow")
-    sa_ni  = sa.get("net_profit")
-    if sa_ocf is not None and sa_ni is not None and sa_ni != 0:
+def m_cce(fin, banking, sa, ctx):
+    """Cash & Cash Equivalents, expressed as % of total assets (same-year,
+    same-source figures only, so scale always cancels)."""
+    cash, ta = _latest(fin, "cash"), _latest(fin, "total_assets")
+    yr = _latest_year(fin, "cash")
+    src_label, src_url = f"FY{yr} PSX financials", ctx["urls"].get("psx")
+    if cash is None or ta in (None, 0) or _latest_year(fin, "total_assets") != yr:
+        stmts = ctx.get("stmts") or {}
+        cs, as_ = _stmt_series(stmts, "cash"), _stmt_series(stmts, "total_assets")
+        if cs and as_ and cs[-1][0] == as_[-1][0] and as_[-1][1]:
+            cash, ta, yr = cs[-1][1], as_[-1][1], cs[-1][0]
+            src_label, src_url = (f"FY{yr} balance sheet (S&P Global)",
+                                  ctx["urls"].get("sa_balance"))
+        elif sa.get("cash") is not None:
+            # single reported figure but no matching total assets → show, don't score
+            return _na("Cash reported but total assets missing for the same year",
+                       "StockAnalysis statistics", ctx["urls"].get("sa_stats"))
+        else:
+            return _na("Needs reported cash & equivalents and total assets",
+                       "Not found in any source", ctx["urls"].get("psx"))
+    pct = cash / ta * 100.0
+    sub = higher_better(pct, 2, 18)
+    return sub, pct, f"{pct:.1f}% of assets", \
+        f"Cash & equivalents ÷ total assets (FY{yr})", src_label, src_url
+
+
+def m_cashflow_quality(fin, banking, sa, ctx):
+    sa_ocf, sa_ni = sa.get("operating_cashflow"), sa.get("net_profit")
+    if sa_ocf is not None and sa_ni not in (None, 0):
         ratio = sa_ocf / sa_ni
-        sub = higher_better(ratio, 0.4, 1.1)
-        return (sub, ratio, _fmt_ratio(ratio, False),
-                "Operating cash flow vs net profit",
-                "StockAnalysis (S&P Global)", False)
+        return (higher_better(ratio, 0.4, 1.1), ratio, _fmt_ratio(ratio),
+                "Operating cash flow ÷ net profit",
+                "StockAnalysis statistics (S&P Global)", ctx["urls"].get("sa_stats"))
+    ocf, np_ = _latest(fin, "operating_cashflow"), _latest(fin, "net_profit")
+    yr = _latest_year(fin, "operating_cashflow")
+    if ocf is None or np_ in (None, 0):
+        return _na("Needs reported operating cash flow and net profit",
+                   "Cash-flow statement not found", ctx["urls"].get("psx"))
+    ratio = ocf / np_
+    return (higher_better(ratio, 0.4, 1.1), ratio, _fmt_ratio(ratio),
+            f"Operating cash flow ÷ net profit (FY{yr})",
+            f"FY{yr} PSX financials", ctx["urls"].get("psx"))
 
-    ocf = _latest(fin, "operating_cashflow")
-    np_ = _latest(fin, "net_profit")
-    estimated = False
 
-    if ocf is None and np_ is not None:
-        ocf = np_ * 0.90
-        estimated = True
+def m_dividend_yield(fin, banking, sa, ctx):
+    if sa.get("dividend_yield_pct") is not None:
+        y = sa["dividend_yield_pct"]
+        return (band_better(y, 0.0, 4.0, 12.0, 28.0), y, _fmt_pct(y),
+                "Annual dividend ÷ share price",
+                "StockAnalysis dividend data (S&P Global)",
+                ctx["urls"].get("sa_dividend"))
+    price = ctx.get("price")
+    dby = (sa.get("dividend_by_year") or {})
+    dps, yr = None, None
+    if dby:
+        yr = max(dby)
+        dps = dby[yr]
+    if dps is None:
+        dps, yr = _latest(fin, "dividend_per_share"), _latest_year(fin, "dividend_per_share")
+    if dps is None or not price:
+        return _na("Needs the reported dividend per share and a live PSX price",
+                   "Dividend record not found", ctx["urls"].get("psx"))
+    y = dps / price * 100.0
+    return (band_better(y, 0.0, 4.0, 12.0, 28.0), y, _fmt_pct(y),
+            f"FY{yr} DPS ₨{dps:g} ÷ price ₨{price:g}",
+            f"FY{yr} payouts ÷ PSX live price", ctx["urls"].get("psx"))
 
-    if ocf is None or np_ is None or np_ == 0:
-        ratio = _SECTOR_CF_PROXY
-        estimated = True
+
+def m_pe_ratio(fin, banking, sa, ctx):
+    pe, src_label, src_url = None, "", None
+    if sa.get("pe") is not None:
+        pe = sa["pe"]
+        src_label, src_url = ("StockAnalysis statistics (S&P Global)",
+                              ctx["urls"].get("sa_stats"))
+        note = "Share price ÷ earnings per share"
     else:
-        ratio = ocf / np_
-
-    yr = (_latest_year(fin, "operating_cashflow") or
-          _latest_year(fin, "net_profit"))
-    sub = higher_better(ratio, 0.4, 1.1)
-    note = "Operating cash flow vs net profit"
-    if estimated:
-        note = "Cash flow quality (estimated) *"
-    src = f"FY{yr}" if yr else "Sector estimate"
-    return sub, ratio, _fmt_ratio(ratio, estimated), note, src, estimated
-
-
-def m_dividend(fin, banking=False, sa=None):
-    s = _series(fin, "dividend_per_share")
-    estimated = False
-
-    if not s:
-        # No dividend records at all → score as 0 paid / 1 year
-        sub = 0.0
-        disp = "0/1 yrs *"
-        src = "No dividend record found"
-        return sub, 0.0, disp, "Dividend consistency (no data) *", src, True
-
-    paid = sum(1 for _, v in s if v and v > 0)
-    consistency = paid / len(s)
-    sub = higher_better(consistency, 0.3, 1.0)
-    yr_range = f"FY{s[0][0]}–FY{s[-1][0]}"
-    disp = f"{paid}/{len(s)} yrs"
-    return sub, consistency * 100, disp, "Years a dividend was paid", yr_range, estimated
+        price, eps = ctx.get("price"), _latest(fin, "eps")
+        yr = _latest_year(fin, "eps")
+        if not price or eps is None:
+            return _na("Needs a live PSX price and reported EPS",
+                       "EPS not found", ctx["urls"].get("psx"))
+        if eps <= 0:
+            return (0.0, 0.0, "Loss-making",
+                    "Negative EPS — P/E undefined, scored 0",
+                    f"FY{yr} PSX financials", ctx["urls"].get("psx"))
+        pe = price / eps
+        src_label, src_url = f"PSX price ÷ FY{yr} EPS", ctx["urls"].get("psx")
+        note = f"Price ₨{price:g} ÷ EPS ₨{eps:g} (FY{yr})"
+    if pe <= 0:
+        return (0.0, pe, "Loss-making", "Negative earnings — scored 0",
+                src_label, src_url)
+    sub = lower_better(pe, 4.0, 30.0)
+    return sub, pe, f"{pe:.1f}x", note, src_label, src_url
 
 
-def m_capital_adequacy(fin, banking=False, sa=None):
+def m_capital_adequacy(fin, banking, sa, ctx):
     car = _latest(fin, "capital_adequacy")
-    estimated = False
-
-    if car is None:
-        car = 11.5   # SBP minimum floor
-        estimated = True
-
     yr = _latest_year(fin, "capital_adequacy")
+    if car is None:
+        return _na("Needs the bank's reported Capital Adequacy Ratio",
+                   "CAR not found in filings", ctx["urls"].get("psx"))
     sub = higher_better(car, 11.5, 18)
-    note = "Capital adequacy ratio"
-    if estimated:
-        note = "Capital adequacy (SBP minimum floor) *"
-    src = f"FY{yr}" if yr else "Estimated at SBP minimum"
-    return sub, car, _fmt_pct(car, estimated), note, src, estimated
-
-
-def m_price_trend(fin, banking=False, price_history=None, sa=None):
-    """12-month share-price momentum.  Added in v2 scoring model."""
-    from datetime import date as _date
-    ph = price_history or []
-    estimated = False
-
-    if len(ph) < 2:
-        sub = 5.0
-        estimated = True
-        return sub, 0.0, "—", "12-month price momentum (no history)", "No price data", True
-
-    last = ph[-1]
-    try:
-        last_d = _date.fromisoformat(last["date"])
-        target = last_d.replace(year=last_d.year - 1)
-    except Exception:
-        sub = 5.0
-        return sub, 0.0, "—", "12-month price momentum", "Date parse error", True
-
-    ref = min(ph, key=lambda p: abs((_date.fromisoformat(p["date"]) - target).days))
-    r0, r1 = ref["close"], last["close"]
-    ret = ((r1 - r0) / r0 * 100) if r0 else 0.0
-    sub = higher_better(ret, -25, 45)
-    arrow = "▲" if ret >= 0 else "▼"
-    disp = f"{ret:+.1f}% {arrow}"
-    note = "12-month share-price momentum"
-    src = f"PSX EOD {ref['date']} → {last['date']}"
-    return sub, ret, disp, note, src, estimated
+    return (sub, car, _fmt_pct(car), f"Reported CAR (FY{yr}); SBP floor 11.5%",
+            f"FY{yr} PSX financials", ctx["urls"].get("psx"))
 
 
 METRIC_FUNCS = {
-    "revenue_growth":   ("Revenue Growth",       m_revenue_growth),
-    "profit_margin":    ("Profit Margin",         m_profit_margin),
-    "eps_growth":       ("EPS Growth",            m_eps_growth),
-    "debt_to_equity":   ("Debt / Equity",         m_debt_to_equity),
-    "roe":              ("Return on Equity",      m_roe),
-    "current_ratio":    ("Current Ratio",         m_current_ratio),
-    "cashflow_quality": ("Cash Flow Quality",     m_cashflow_quality),
-    "dividend":         ("Dividend",              m_dividend),
-    "capital_adequacy": ("Capital Adequacy",      m_capital_adequacy),
-    "price_trend":      ("Share Price Trend",     m_price_trend),
+    "revenue_growth":   ("Revenue Growth",        m_revenue_growth),
+    "profit_margin":    ("Profit Margin",          m_profit_margin),
+    "eps_growth":       ("EPS Growth",             m_eps_growth),
+    "roic":             ("Return on Invested Capital", m_roic),
+    "roe":              ("Return on Equity",       m_roe),
+    "debt_to_equity":   ("Debt / Equity",          m_debt_to_equity),
+    "current_ratio":    ("Current Ratio",          m_current_ratio),
+    "cce":              ("Cash & Equivalents",     m_cce),
+    "cashflow_quality": ("Cash Flow Quality",      m_cashflow_quality),
+    "dividend_yield":   ("Dividend Yield",         m_dividend_yield),
+    "pe_ratio":         ("P/E Ratio",              m_pe_ratio),
+    "capital_adequacy": ("Capital Adequacy",       m_capital_adequacy),
 }
 
 
@@ -474,68 +475,70 @@ def score_company(scrape: Dict) -> Dict:
               or scrape.get("sector", "") or "")
     banking = is_financial_sector(sector)
     weights = config.WEIGHTS_BANKING if banking else config.WEIGHTS_GENERAL
+    sa = scrape.get("sa_data", {}) or {}
+    symbol = scrape.get("symbol", "")
+
+    urls = scrape.get("source_urls") or {}
+    if not urls and symbol:                       # older payloads / demo
+        urls = {
+            "psx":         f"https://dps.psx.com.pk/company/{symbol}",
+            "sa_stats":    f"https://stockanalysis.com/quote/psx/{symbol}/statistics/",
+            "sa_income":   f"https://stockanalysis.com/quote/psx/{symbol}/financials/",
+            "sa_balance":  f"https://stockanalysis.com/quote/psx/{symbol}/financials/balance-sheet/",
+            "sa_dividend": f"https://stockanalysis.com/quote/psx/{symbol}/dividend/",
+        }
+    ctx = {
+        "symbol": symbol,
+        "urls":   urls,
+        "stmts":  {int(y): r for y, r in (scrape.get("sa_statements") or {}).items()},
+        "price":  (scrape.get("profile") or {}).get("price"),
+    }
 
     metrics: List[Dict] = []
-    weighted_sum   = 0.0
-    total_weight   = sum(weights.values())
-    estimated_weight = 0.0
-
-    # StockAnalysis ratios merged during scraping (real, not derived)
-    sa = scrape.get("sa_data", {}) or {}
+    weighted_sum     = 0.0
+    available_weight = 0.0
+    total_weight     = sum(weights.values())
 
     for key, weight in weights.items():
         label, func = METRIC_FUNCS[key]
-        if key == "price_trend":
-            result = func(fin, banking=banking, sa=sa,
-                          price_history=scrape.get("price_history", []))
-        else:
-            result = func(fin, banking=banking, sa=sa)
-
-        if len(result) == 6:
-            sub, value, display, note, src_note, estimated = result
-        else:
-            sub, value, display, note = result
-            src_note, estimated = "", False
-
-        # sub is always a number now; status derives from it
-        st = _status(sub, estimated)
+        sub, value, display, note, src_label, src_url = func(fin, banking, sa, ctx)
+        st = _status(sub)
 
         metrics.append({
-            "key":         key,
-            "label":       label,
-            "weight":      round(weight * 100),
-            "subscore":    round(sub, 1),
-            "value":       value,
-            "display":     display,
-            "status":      st,
-            "note":        note,
-            "source_note": src_note,
-            "source_doc":  src_note,   # v2: shown in explainer modal
-            "source_date": src_note,   # v2: shown in explainer modal
-            "estimated":   estimated,
+            "key":          key,
+            "label":        label,
+            "weight":       round(weight * 100, 1),
+            "subscore":     round(sub, 1) if sub is not None else None,
+            "value":        value,
+            "display":      display,
+            "status":       st,
+            "note":         note,
+            "source_note":  src_label,
+            "source_doc":   src_label,
+            "source_date":  "",
+            "source_url":   src_url,
+            "estimated":    False,          # v3: estimation is never used
         })
 
-        weighted_sum += (sub / 10.0) * weight
-        if estimated:
-            estimated_weight += weight
+        if sub is not None:
+            weighted_sum     += (sub / 10.0) * weight
+            available_weight += weight
 
-    score = (weighted_sum / total_weight) * 100.0 if total_weight > 0 else 0.0
-
-    # confidence = share of weight backed by real (non-estimated) data
-    real_weight    = total_weight - estimated_weight
-    confidence_pct = round((real_weight / total_weight) * 100) if total_weight > 0 else 0
+    # RE-WEIGHT over the metrics that had real data — score always spans 0-100
+    score = (weighted_sum / available_weight) * 100.0 if available_weight > 0 else 0.0
+    coverage = available_weight / total_weight if total_weight > 0 else 0.0
 
     highlights = [m["label"] for m in metrics if m["status"] == "good"]
     concerns   = [m["label"] for m in metrics if m["status"] == "bad"]
 
     return {
-        "symbol":       scrape.get("symbol"),
+        "symbol":       symbol,
         "model":        "banking" if banking else "general",
         "sector":       sector,
         "score":        round(score, 1),
         "verdict":      verdict_for(score),
-        "coverage":     round(total_weight, 2),
-        "confidence":   confidence_pct,
+        "coverage":     round(coverage, 2),
+        "confidence":   round(coverage * 100),   # v3: all scored data is real
         "data_quality": scrape.get("data_quality"),
         "metrics":      metrics,
         "trends":       _build_trends(fin),
@@ -545,6 +548,7 @@ def score_company(scrape: Dict) -> Dict:
         "profile":      scrape.get("profile", {}),
         "reports":      scrape.get("reports", []),
         "price_history": scrape.get("price_history", []),
+        "source_urls":  urls,
         "scraped_at":   scrape.get("scraped_at"),
     }
 
@@ -563,38 +567,33 @@ def _build_trends(fin: List[Dict]) -> Dict[str, List[Dict]]:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    import json
-
     demo = {
         "symbol": "DEMO",
         "profile": {"sector": "CEMENT", "price": 145.3},
         "data_quality": 0.9,
         "warnings": [],
         "financials": [
-            {"year": 2019, "revenue": 80_000, "net_profit": 12_000, "eps": 9.1,
-             "total_assets": 150_000, "total_equity": 90_000, "total_debt": 25_000,
-             "current_assets": 40_000, "current_liabilities": 22_000,
-             "operating_cashflow": 13_500, "dividend_per_share": 4},
-            {"year": 2020, "revenue": 88_000, "net_profit": 13_800, "eps": 10.3,
-             "total_assets": 160_000, "total_equity": 98_000, "total_debt": 24_000,
-             "current_assets": 44_000, "current_liabilities": 23_000,
-             "operating_cashflow": 15_000, "dividend_per_share": 4.5},
+            {"year": 2023, "revenue": 140_000, "net_profit": 24_000, "eps": 17.8,
+             "total_assets": 200_000, "total_equity": 135_000, "total_debt": 18_000,
+             "current_assets": 60_000, "current_liabilities": 26_000, "cash": 22_000,
+             "operating_profit": 38_000, "profit_before_tax": 34_000, "income_tax": 10_000,
+             "operating_cashflow": 26_000, "dividend_per_share": 7},
             {"year": 2024, "revenue": 162_000, "net_profit": 28_900, "eps": 21.4,
              "total_assets": 224_000, "total_equity": 150_000, "total_debt": 16_000,
-             "current_assets": 68_000, "current_liabilities": 28_000,
+             "current_assets": 68_000, "current_liabilities": 28_000, "cash": 30_000,
+             "operating_profit": 45_000, "profit_before_tax": 41_000, "income_tax": 12_100,
              "operating_cashflow": 30_000, "dividend_per_share": 8},
         ],
+        "sa_data": {}, "sa_statements": {},
         "price_history": [], "reports": [],
         "scraped_at": utils.now_iso(),
     }
-
     result = score_company(demo)
     print(f"Score: {result['score']} ({result['verdict']['label']}) "
           f"confidence={result['confidence']}%")
     for m in result["metrics"]:
-        bar = "█" * int(m["subscore"]) + "░" * (10 - int(m["subscore"]))
-        est = " [est]" if m["estimated"] else ""
-        print(f"  {m['label']:<22} {bar} {str(m['subscore']):>4}/10 "
-              f"{m['display']:>14} [{m['status']}]{est}")
-        if m["source_note"]:
-            print(f"    ↳ {m['source_note']}")
+        ss = m["subscore"]
+        bar = ("█" * int(ss) + "░" * (10 - int(ss))) if ss is not None else "·" * 10
+        print(f"  {m['label']:<28} {bar} {str(ss):>4}/10 "
+              f"{m['display']:>16} [{m['status']}]")
+        print(f"    ↳ {m['source_note']}  {m['source_url'] or ''}")
