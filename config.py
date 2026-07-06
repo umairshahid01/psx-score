@@ -49,16 +49,27 @@ SA_DIVIDEND_URL = "https://stockanalysis.com/quote/psx/{symbol}/dividend/"
 # Indices we surface in the UI (label -> portal code)
 INDICES = {
     "KSE100": "KSE100",
-    "KSE50":  "KSE50",
+    "KSE50":  None,       # v3.4: PSX publishes no KSE-50 page (was a 404 on
+                          # every refresh) — derived as the top 50 of KSE-100
     "KSE30":  "KSE30",
     "KMI30":  "KMI30",
     "ALLSHR": "ALLSHR",   # All Shares
 }
 
 # Polite scraping
-REQUEST_TIMEOUT = 20          # seconds
-REQUEST_RETRIES = 3
-REQUEST_BACKOFF = 1.5         # seconds, multiplied each retry
+# Version stamp — printed at startup, returned by /api/health, shown in the
+# dashboard footer. If the console banner does not show this version, the
+# files on GitHub (which PSX.bat re-downloads at every launch) are stale.
+APP_VERSION = "3.5.0"
+
+# Version stamp — printed at startup, returned by /api/health, shown in the
+# dashboard footer. If the console banner does not show this version, the
+# files on GitHub (which PSX.bat re-downloads at every launch) are stale.
+APP_VERSION = "3.5.0"
+
+REQUEST_TIMEOUT = 15          # seconds
+REQUEST_RETRIES = 2           # v3.3: retries only help transient errors
+REQUEST_BACKOFF = 1.0         # seconds, multiplied each retry
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
@@ -171,6 +182,14 @@ DEEPDATA = {
     "freshness_complete_days": 120,
     "prewarm": True,              # background pass over the whole universe
     "prewarm_delay_s": 25,        # pause between symbols (be a good citizen)
+    # ---- v3.3 performance & robustness ----
+    "background": True,           # deep fetches NEVER run inside a user request
+    "retry_incomplete_hours": 24, # cooldown before re-trying an incomplete symbol
+    "max_pdf_pages": 250,         # parse cap per document (early-exits when done)
+    "image_probe_pages": 6,       # pages sampled to detect image-only (scanned) PDFs
+    "user_idle_grace_s": 90,      # prewarm pauses while a user is actively analyzing
+    "ocr": False,                 # optional: pip install rapidocr-onnxruntime to
+                                  # read image-only reports (off by default)
 }
 
 PREDICTOR = {

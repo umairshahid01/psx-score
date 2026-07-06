@@ -60,7 +60,17 @@ def index() -> Response:
 
 @app.route("/api/health")
 def health():
-    return jsonify({"ok": True, "app": config.APP_NAME, "time": utils.now_iso()})
+    return jsonify({"ok": True, "app": config.APP_NAME,
+                    "version": config.APP_VERSION, "time": utils.now_iso()})
+
+
+@app.route("/api/progress")
+def progress():
+    """v3.5 — real pipeline progress for the dashboard's percentage bar."""
+    symbol = request.args.get("symbol", "").strip().upper()
+    if not symbol:
+        return jsonify({"pct": 0, "stage": ""})
+    return jsonify(utils.progress_get(symbol))
 
 
 # ---------------------------------------------------------------------------
@@ -82,10 +92,13 @@ def _analyse(symbol: str) -> Dict:
     with _cache_lock:
         hit = _analysis_cache.get(symbol)
         if hit and (time.time() - hit[0]) < ttl:
+            utils.progress_update(symbol, 100, "Ready")   # instant cache hit
             return hit[1]
 
     scraped = scraper.scrape_company(symbol)
+    utils.progress_update(symbol, 90, "Scoring the 11 fundamentals…")
     result = scorer.score_company(scraped)
+    utils.progress_update(symbol, 100, "Ready")
 
     with _cache_lock:
         _analysis_cache[symbol] = (time.time(), result)
@@ -97,6 +110,10 @@ def analyze():
     symbol = request.args.get("symbol", "").strip()
     if not symbol:
         return jsonify({"error": "Pass ?symbol=TICKER"}), 400
+    try:                                   # v3.3: background work yields
+        import deepdata; deepdata.note_user_activity()
+    except Exception:  # noqa: BLE001
+        pass
     if request.args.get("fresh") in ("1", "true"):
         with _cache_lock:
             _analysis_cache.pop(symbol.upper(), None)
@@ -123,6 +140,10 @@ def predict_route():
     symbol = request.args.get("symbol", "").strip().upper()
     if not symbol:
         return jsonify({"error": "Pass ?symbol=TICKER"}), 400
+    try:                                   # v3.3: background work yields
+        import deepdata; deepdata.note_user_activity()
+    except Exception:  # noqa: BLE001
+        pass
     ttl = config.ANALYSIS_TTL_MINUTES * 60
     with _cache_lock:
         hit = _prediction_cache.get(symbol)
@@ -130,8 +151,10 @@ def predict_route():
             return jsonify(hit[1])
     try:
         scraped = scraper.scrape_company(symbol)
+        utils.progress_update(symbol, 90, "Running the technical engine…")
         fundamental = scorer.score_company(scraped)
         result = predictor.predict(scraped, fundamental)
+        utils.progress_update(symbol, 100, "Ready")
         result["fundamental"] = {
             "score": fundamental.get("score"),
             "verdict": fundamental.get("verdict"),
@@ -188,7 +211,7 @@ def _open_browser():
 
 def main():
     print("=" * 60)
-    print(f"  {config.APP_NAME}")
+    print(f"  {config.APP_NAME}  ·  v{config.APP_VERSION}")
     print(f"  Dashboard:  http://{config.HOST}:{config.PORT}")
     print("  Refreshing PSX stock list in the background ...")
     print("=" * 60)

@@ -238,56 +238,118 @@ def m_eps_growth(fin, banking, sa, ctx):
     return sub, g, _fmt_pct(g), f"EPS CAGR ({rng})", f"Reported statements, {rng}", src_url
 
 
-def _roic_from(recs_by_year: Dict[int, Dict]) -> Optional[Tuple[float, int, float]]:
+def _roic_from(recs_by_year: Dict[int, Dict]) -> Optional[Dict]:
     """
-    ROIC from one consistent dataset (never mixes sources/scales):
-      NOPAT_t = operating_profit_t × (1 − income_tax_t ÷ profit_before_tax_t)
-      IC_t    = total_debt_t + total_equity_t
-      ROIC    = NOPAT_t ÷ average(IC_t, IC_{t-1})
-    Requires every input to be a real reported figure. Returns
-    (roic_pct, year, tax_rate) or None.
+    v3.3 — ROIC from one consistent dataset, via a LADDER of exact accounting
+    identities so it computes for every real operating company. Every tier
+    uses ONLY figures printed in the filed statements; the note reports
+    exactly which construction was used. Nothing is ever estimated.
+
+      EBIT       (a) reported operating profit
+                 (b) PBT + interest expense − interest income   [P&L identity]
+      Tax rate   (a) reported income tax ÷ PBT
+                 (b) (PBT − net profit) ÷ PBT                   [P&L identity]
+      Invested   (a) average of 2 years' (total debt + equity)
+      capital    (b) year-end (total debt + equity)
+                 (c) total assets − current liabilities   [textbook operating
+                     definition of invested capital, same balance sheet]
+
+    Returns {"roic","year","tax_rate","how"} or None.
     """
     years = sorted(y for y, r in recs_by_year.items() if r)
-    for t in reversed(years):                      # newest year with full data
+    for t in reversed(years):                    # newest year with enough data
         r = recs_by_year.get(t) or {}
-        op, pbt, tax = r.get("operating_profit"), r.get("profit_before_tax"), r.get("income_tax")
-        d1, e1 = r.get("total_debt"), r.get("total_equity")
+        pbt = r.get("profit_before_tax")
+        if pbt is None or pbt <= 0:
+            continue
+
+        # ---- EBIT ----
+        how_ebit = None
+        ebit = r.get("operating_profit")
+        if ebit is not None and ebit > 0:
+            how_ebit = "reported operating profit"
+        else:
+            ie, ii = r.get("interest_expense"), r.get("interest_income")
+            if ie is not None and ii is not None:
+                ebit = pbt + abs(ie) - abs(ii)
+                how_ebit = "EBIT = PBT + interest expense − interest income"
+        if ebit is None or ebit <= 0:
+            continue
+
+        # ---- tax rate ----
+        how_tax = None
+        tax = r.get("income_tax")
+        if tax is not None:
+            rate = abs(tax) / pbt
+            how_tax = "reported tax"
+        else:
+            np_ = r.get("net_profit")
+            if np_ is None:
+                continue
+            rate = (pbt - np_) / pbt
+            how_tax = "tax = PBT − net profit"
+        if not (0.0 <= rate <= 0.60):
+            continue
+        nopat = ebit * (1 - rate)
+
+        # ---- invested capital ----
+        def _ic(rec):
+            d, e = rec.get("total_debt"), rec.get("total_equity")
+            if d is not None and e is not None:
+                return d + e, "debt + equity"
+            ta, cl = rec.get("total_assets"), rec.get("current_liabilities")
+            if ta is not None and cl is not None:
+                return ta - cl, "assets − current liabilities"
+            return None, None
+
+        ic1, kind1 = _ic(r)
+        if ic1 is None or ic1 <= 0:
+            continue
         prev = recs_by_year.get(t - 1) or {}
-        d0, e0 = prev.get("total_debt"), prev.get("total_equity")
-        if None in (op, pbt, tax, d1, e1, d0, e0):
+        ic0, kind0 = _ic(prev)
+        if ic0 is not None and ic0 > 0 and kind0 == kind1:
+            ic, how_ic = (ic1 + ic0) / 2.0, f"avg {kind1} (FY{t-1}–FY{t})"
+        else:
+            ic, how_ic = ic1, f"year-end {kind1} (FY{t})"
+        if ic <= 0:
             continue
-        if pbt <= 0 or op <= 0:
-            continue
-        tax_rate = max(0.0, min(0.60, abs(tax) / pbt))
-        nopat = op * (1 - tax_rate)
-        ic_avg = ((d1 + e1) + (d0 + e0)) / 2.0
-        if ic_avg <= 0:
-            continue
-        return nopat / ic_avg * 100.0, t, tax_rate * 100.0
+
+        return {"roic": nopat / ic * 100.0, "year": t,
+                "tax_rate": rate * 100.0,
+                "how": f"{how_ebit}; {how_tax}; IC = {how_ic}"}
     return None
 
 
 def m_roic(fin, banking, sa, ctx):
-    # dataset 1: PSX financial records (as parsed from the company's tables)
+    # tier 0 (v3.4): S&P Global publishes ROIC on the statistics page,
+    # computed from the company's own filed statements — a directly
+    # reported figure, available for virtually every covered stock.
+    if sa.get("roic_pct") is not None:
+        roic = sa["roic_pct"]
+        return (higher_better(roic, 4, 20), roic, _fmt_pct(roic),
+                "NOPAT ÷ average invested capital (reported)",
+                "StockAnalysis statistics (S&P Global, from filed statements)",
+                ctx["urls"].get("sa_stats"))
+    # dataset 1: PSX records (includes deep-fetched official-report figures)
     psx = {r["year"]: r for r in fin if r.get("year") is not None}
     got = _roic_from(psx)
     src_label, src_url = "PSX company financials", ctx["urls"].get("psx")
+    if got is not None:
+        lbl, u = _rec_src(fin, "operating_profit", ctx, src_label)
+        if u and u != ctx["urls"].get("psx"):
+            src_label, src_url = lbl, u
     if got is None:                                # dataset 2: SA statements
         got = _roic_from(ctx.get("stmts") or {})
         src_label, src_url = ("StockAnalysis annual statements (S&P Global)",
                               ctx["urls"].get("sa_balance"))
     if got is None:
-        return _na("Needs reported operating profit, tax, debt & equity for "
-                   "2 consecutive years — no estimation is ever used",
-                   "Complete statement set not found", ctx["urls"].get("sa_income"))
-    roic, yr, trate = got
+        return _na("Awaiting the company's filed statements — the background "
+                   "collector is gathering them; no estimation is ever used",
+                   "Statement set not found yet", ctx["urls"].get("sa_income"))
+    roic, yr, trate = got["roic"], got["year"], got["tax_rate"]
     sub = higher_better(roic, 4, 20)
-    note = f"NOPAT ÷ avg invested capital (FY{yr}, tax {trate:.0f}%)"
-    if src_url == ctx["urls"].get("psx"):
-        src_label2, u = _rec_src(fin, "operating_profit", ctx, src_label)
-        if u != ctx["urls"].get("psx"):
-            src_label, src_url = src_label2, u
-    return sub, roic, _fmt_pct(roic), note, f"FY{yr - 1}–FY{yr} {src_label}", src_url
+    note = f"NOPAT ÷ invested capital (FY{yr}, tax {trate:.0f}%) · {got['how']}"
+    return sub, roic, _fmt_pct(roic), note, f"FY{yr} {src_label}", src_url
 
 
 def m_roe(fin, banking, sa, ctx):

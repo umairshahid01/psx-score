@@ -86,12 +86,39 @@ _NO_SCALE = {"eps", "dividend_per_share", "capital_adequacy"}
 _SKIP_DOMAINS = ("facebook.", "twitter.", "x.com", "linkedin.", "youtube.",
                  "instagram.", "psx.com.pk", "sbp.org", "secp.gov",
                  "google.", "whatsapp.", "mailto:", "javascript:")
-_IR_HINT = re.compile(r"invest|financ|report|annual|account|sharehold|agm|result", re.I)
+_IR_HINT = re.compile(r"invest|financ|report|annual|account|sharehold|result", re.I)
 _PDF_HINT = re.compile(r"annual|financ|account|report|statement|result", re.I)
+# v3.4 — documents that are not financial statements: never download them.
+# (The log showed sustainability reports, mobile-account FAQs and PACRA
+#  rating press releases being fetched and parsed for figures.)
+_PDF_EXCLUDE = re.compile(
+    r"sustainab|esg\b|climate|carbon|faq|press[\s_-]?release|pacra|vis[\s_-]?credit|"
+    r"rating|notice|agm|egm|proxy|prospectus|policy|governance|calendar|"
+    r"code[\s_-]?of[\s_-]?conduct|whistle|brochure|presentation|profile|"
+    r"director[\s_-]?report[\s_-]?only|analyst[\s_-]?briefing", re.I)
 
 _lock = threading.Lock()
 _status = {"prewarm_running": False, "prewarm_done": 0, "prewarm_total": 0,
-           "last_symbol": None, "stored": 0}
+           "last_symbol": None, "stored": 0, "queue": 0}
+
+# v3.3 — one deep fetch per symbol at a time, across prewarm AND user requests
+_in_progress: Set[str] = set()
+# v3.3 — background work queue: user requests only ever ENQUEUE
+_queue: List[Tuple[str, bool]] = []
+_queue_evt = threading.Event()
+_worker_started = False
+# v3.3 — prewarm politely pauses while a user is actively analyzing
+_user_active_until = 0.0
+
+
+def note_user_activity() -> None:
+    """Called by the API routes; background work yields to the user."""
+    global _user_active_until
+    _user_active_until = time.time() + CFG.get("user_idle_grace_s", 90)
+
+
+def _user_active() -> bool:
+    return time.time() < _user_active_until
 
 
 def _store_path(symbol: str) -> str:
@@ -126,6 +153,22 @@ def _is_fresh(store: Optional[Dict]) -> bool:
     limit = CFG.get("freshness_complete_days", 120) if store.get("complete") \
         else CFG.get("freshness_days", 45)
     return age_days < limit
+
+
+def _in_cooldown(store: Optional[Dict]) -> bool:
+    """
+    v3.3 — an INCOMPLETE store must not be re-fetched on every request
+    (that was re-downloading the same 30 MB annual report again and again).
+    One attempt, then wait retry_incomplete_hours before trying again.
+    """
+    if not store or not store.get("last_attempt"):
+        return False
+    try:
+        age_h = (datetime.now(timezone.utc)
+                 - datetime.fromisoformat(store["last_attempt"])).total_seconds() / 3600
+    except Exception:  # noqa: BLE001
+        return False
+    return age_h < CFG.get("retry_incomplete_hours", 24)
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +255,7 @@ def crawl_for_pdfs(base_url: str, session,
             text = a.get_text(" ", strip=True)
             blob = f"{href} {text}"
             if href.lower().split("?")[0].endswith(".pdf"):
-                if not _PDF_HINT.search(blob):
+                if not _PDF_HINT.search(blob) or _PDF_EXCLUDE.search(blob):
                     continue
                 ym = _YEAR_TOKEN.search(text) or _YEAR_TOKEN.search(href)
                 year = int(ym.group(1)) if ym else None
@@ -339,25 +382,72 @@ def _parse_table_rows(table: List[List], scale: str, now_year: int) -> Dict[int,
     return out
 
 
+def _try_ocr_page(page) -> str:
+    """
+    OPTIONAL OCR for image-only pages (config.DEEPDATA["ocr"] +
+    `pip install rapidocr-onnxruntime`). Off by default because OCR of
+    financial figures must be a deliberate user choice.
+    """
+    if not CFG.get("ocr"):
+        return ""
+    try:
+        from rapidocr_onnxruntime import RapidOCR  # type: ignore
+        img = page.to_image(resolution=220).original
+        import numpy as np  # bundled with onnxruntime installs
+        result, _ = RapidOCR()(np.array(img))
+        return "\n".join(r[1] for r in (result or []))
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _looks_image_only(pdf) -> bool:
+    """v3.3 — sample the first pages: no extractable text ⇒ scanned/graphic PDF."""
+    probe = CFG.get("image_probe_pages", 6)
+    chars = 0
+    for page in pdf.pages[:probe]:
+        try:
+            chars += len(page.extract_text() or "")
+        except Exception:  # noqa: BLE001
+            pass
+        if chars > 200:
+            return False
+    return chars <= 200
+
+
 def parse_pdf_multi_year(raw: bytes, doc_title: str, doc_url: str,
-                         max_pages: int = 80) -> Tuple[Dict[int, Dict], Dict]:
+                         max_pages: int = None,
+                         banking: bool = False) -> Tuple[Dict[int, Dict], Dict, bool]:
     """
     Extract {year: {field: value}} from a financial-report PDF, with
     provenance {year: {field: {"label","url","page"}}}. Only values printed
     in the document are returned — nothing is derived.
+
+    Returns (by_year, provenance, image_only). v3.3: detects image-only
+    (scanned/graphic) PDFs up-front so they are recorded and never
+    re-downloaded, and early-exits as soon as the required field set is
+    complete for the document's two newest years.
     """
     by_year: Dict[int, Dict] = {}
     prov: Dict[int, Dict] = {}
+    max_pages = max_pages or CFG.get("max_pdf_pages", 250)
     if pdfplumber is None or not raw:
-        return by_year, prov
+        return by_year, prov, False
     now_year = datetime.now().year
     try:
         with pdfplumber.open(io.BytesIO(raw)) as pdf:
+            if _looks_image_only(pdf):
+                if not CFG.get("ocr"):
+                    print(f"  [deep] {doc_title!r} is an image-only PDF — "
+                          f"no machine-readable text (enable OCR in "
+                          f"config.DEEPDATA to attempt reading it)")
+                    return by_year, prov, True
             for pno, page in enumerate(pdf.pages[:max_pages], start=1):
                 try:
                     text = page.extract_text() or ""
                 except Exception:  # noqa: BLE001
                     text = ""
+                if not text.strip():
+                    text = _try_ocr_page(page)
                 scale = _page_scale_hint(text)
                 got, _hdr = _parse_text_page(text, [], scale, now_year)
                 if not got:
@@ -378,9 +468,13 @@ def parse_pdf_multi_year(raw: bytes, doc_title: str, doc_url: str,
                             tgt[f] = v
                             ptg[f] = {"label": f"{doc_title} — p.{pno}",
                                       "url": doc_url, "page": pno}
+                # v3.3: stop reading once the document has yielded the full
+                # required set for its two newest years — big reports are big
+                if by_year and _coverage_ok(by_year, banking):
+                    break
     except Exception as exc:  # noqa: BLE001
         print(f"  [deep] PDF parse failed for {doc_url}: {exc}")
-    return by_year, prov
+    return by_year, prov, False
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +502,23 @@ def deep_fetch(symbol: str, session=None, banking: bool = False,
     store; never raises.
     """
     symbol = symbol.upper()
+    # v3.3 — one deep fetch per symbol at a time (prewarm + requests both
+    # tried to download the same annual report concurrently before)
+    with _lock:
+        if symbol in _in_progress:
+            return load_store(symbol) or {"symbol": symbol, "by_year": {},
+                                          "provenance": {}, "website": None,
+                                          "documents": [], "complete": False}
+        _in_progress.add(symbol)
+    try:
+        return _deep_fetch_locked(symbol, session, banking, psx_html)
+    finally:
+        with _lock:
+            _in_progress.discard(symbol)
+
+
+def _deep_fetch_locked(symbol: str, session=None, banking: bool = False,
+                       psx_html: Optional[str] = None) -> Dict:
     session = session or utils.make_session()
     budget_s = CFG.get("fetch_budget_s", 150)
     max_pdfs = CFG.get("max_pdfs_per_symbol", 4)
@@ -418,12 +529,13 @@ def deep_fetch(symbol: str, session=None, banking: bool = False,
         "symbol": symbol, "by_year": {}, "provenance": {},
         "website": None, "documents": [], "complete": False,
     }
+    store["last_attempt"] = datetime.now(timezone.utc).isoformat()
 
     # candidate documents: exchange-hosted filings first, then the website
     from scraper import find_report_links                    # lazy: no cycle
     docs: List[Dict] = []
     try:
-        docs.extend(find_report_links(symbol, session) or [])
+        docs.extend(find_report_links(symbol, session, html=psx_html) or [])
     except Exception as exc:  # noqa: BLE001
         print(f"  [deep] PSX report links failed for {symbol}: {exc}")
 
@@ -438,7 +550,9 @@ def deep_fetch(symbol: str, session=None, banking: bool = False,
             print(f"  [deep] website crawl failed for {symbol}: {exc}")
 
     seen_urls = {d.get("url") for d in store.get("documents", [])}
-    docs = [d for d in docs if d.get("url") and d["url"] not in seen_urls]
+    docs = [d for d in docs
+            if d.get("url") and d["url"] not in seen_urls
+            and not _PDF_EXCLUDE.search(f"{d.get('title') or ''} {d['url']}")]
     docs.sort(key=lambda r: (bool(re.search(r"annual", (r.get('title') or '') + r['url'], re.I)),
                              r.get("year") or 0), reverse=True)
 
@@ -456,8 +570,15 @@ def deep_fetch(symbol: str, session=None, banking: bool = False,
         if not raw or len(raw) > max_bytes:
             continue
         fetched += 1
-        by_year, prov = parse_pdf_multi_year(raw, doc.get("title") or "Annual report",
-                                             doc["url"])
+        by_year, prov, image_only = parse_pdf_multi_year(
+            raw, doc.get("title") or "Annual report", doc["url"], banking=banking)
+        if image_only:
+            # remember forever — never download this document again
+            store["documents"].append({"title": doc.get("title"), "url": doc["url"],
+                                       "year": doc.get("year"),
+                                       "fields_added": 0, "image_only": True})
+            save_store(symbol, store)
+            continue
         n_new = 0
         for y, rec in by_year.items():
             ys = str(y)
@@ -504,20 +625,29 @@ def fill_gaps(symbol: str, financials: List[Dict], profile: Dict,
     a live deep fetch if enabled and needed) to fill ONLY missing fields in
     the financial records, each stamped with its document + URL + page.
     """
-    info = {"filled": 0, "documents": [], "website": None}
+    info = {"filled": 0, "documents": [], "website": None, "queued": False}
     if not CFG.get("enabled", True):
         return info
     banking = _banking(profile)
     gaps = _missing_fields(financials, banking)
     store = load_store(symbol)
 
-    if gaps > 0 and allow_fetch and (not _is_fresh(store) or
-                                     (store and not store.get("complete"))):
-        try:
-            store = deep_fetch(symbol, session=session, banking=banking,
-                               psx_html=psx_html)
-        except Exception as exc:  # noqa: BLE001
-            print(f"  [deep] fetch failed for {symbol}: {exc}")
+    needs_fetch = gaps > 0 and not _in_cooldown(store) and (
+        not _is_fresh(store) or (store and not store.get("complete")))
+    if needs_fetch:
+        if allow_fetch and not CFG.get("background", True):
+            # legacy synchronous mode (config.DEEPDATA["background"]=False)
+            try:
+                store = deep_fetch(symbol, session=session, banking=banking,
+                                   psx_html=psx_html)
+            except Exception as exc:  # noqa: BLE001
+                print(f"  [deep] fetch failed for {symbol}: {exc}")
+        else:
+            # v3.3 default: user requests NEVER wait on PDF downloads —
+            # the background worker collects the filings and the store is
+            # merged instantly on the next analysis.
+            enqueue(symbol, banking)
+            info["queued"] = True
     if not store:
         return info
 
@@ -560,6 +690,44 @@ def _count_stored() -> int:
 
 
 # ---------------------------------------------------------------------------
+# 5b. Background deep-fetch worker (v3.3)
+# ---------------------------------------------------------------------------
+
+def enqueue(symbol: str, banking: bool = False) -> None:
+    """Queue a symbol for background deep fetching (deduplicated)."""
+    global _worker_started
+    symbol = symbol.upper()
+    with _lock:
+        if symbol in _in_progress or any(s == symbol for s, _ in _queue):
+            return
+        _queue.append((symbol, banking))
+        _status["queue"] = len(_queue)
+        if not _worker_started:
+            _worker_started = True
+            threading.Thread(target=_queue_worker, daemon=True,
+                             name="deepdata-worker").start()
+    _queue_evt.set()
+
+
+def _queue_worker() -> None:
+    while True:
+        _queue_evt.wait(timeout=5)
+        with _lock:
+            item = _queue.pop(0) if _queue else None
+            _status["queue"] = len(_queue)
+            if not _queue:
+                _queue_evt.clear()
+        if item is None:
+            continue
+        sym, banking = item
+        try:
+            print(f"[deep-queue] {sym} …")
+            deep_fetch(sym, banking=banking)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[deep-queue] {sym} failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # 6. Background pre-warm across the whole PSX universe
 # ---------------------------------------------------------------------------
 
@@ -583,8 +751,11 @@ def prewarm_worker(symbols: List[str]) -> None:
     for sym in symbols:
         if sym in done:
             continue
+        # v3.3 — a user is actively working: stay out of their bandwidth
+        while _user_active():
+            time.sleep(5)
         store = load_store(sym)
-        if _is_fresh(store) and store.get("complete"):
+        if (_is_fresh(store) and store.get("complete")) or _in_cooldown(store):
             done.add(sym)
         else:
             try:

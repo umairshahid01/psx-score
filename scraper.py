@@ -137,12 +137,39 @@ def _harvest_label_value_pairs(soup) -> List[tuple]:
 # Live price scraping — multiple strategies
 # ---------------------------------------------------------------------------
 
+def _price_from_html(symbol: str, html: str) -> Optional[float]:
+    """
+    v3.3: extract the live price from the ALREADY-DOWNLOADED company page,
+    using the exact same parsing logic _scrape_live_price applies — this just
+    skips the redundant second download of the same page.
+    """
+    try:
+        soup = BeautifulSoup(html, "lxml")
+        price_patterns = [
+            r"current.*price", r"last.*price", r"^price$",
+            r"ldcp", r"last.*trade", r"ltp", r"^last$",
+        ]
+        pairs = _harvest_label_value_pairs(soup)
+        for label, value in pairs:
+            if any(re.search(p, label, re.I) for p in price_patterns):
+                num = utils.to_number(value)
+                if num and num > 0:
+                    return num
+        for el in soup.find_all(class_=re.compile(r"price|ltp|ldcp|last", re.I)):
+            num = utils.to_number(_text(el))
+            if num and num > 0:
+                return num
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def _scrape_live_price(symbol: str, session) -> Optional[float]:
     """Try several PSX endpoints to get a real-time price."""
+    # v3.3: the /quotes, /api/companies and /symbol endpoints are dead (404)
+    # and were burning retry time on every analysis. The company page is the
+    # endpoint that actually carries the live price.
     candidate_urls = [
-        f"https://dps.psx.com.pk/quotes/{symbol}",
-        f"https://dps.psx.com.pk/api/companies/{symbol}/quote",
-        f"https://dps.psx.com.pk/symbol/{symbol}",
         config.PSX_COMPANY_URL.format(symbol=symbol),
     ]
 
@@ -200,9 +227,10 @@ def _scrape_live_price(symbol: str, session) -> Optional[float]:
 # Company profile
 # ---------------------------------------------------------------------------
 
-def scrape_profile(symbol: str, session) -> Dict:
+def scrape_profile(symbol: str, session, html: str = None) -> Dict:
     url = config.PSX_COMPANY_URL.format(symbol=symbol)
-    html = utils.fetch(url, session=session)
+    if html is None:                       # v3.3: reuse the page when provided
+        html = utils.fetch(url, session=session)
     profile: Dict = {"symbol": symbol, "source_url": url}
 
     if not html:
@@ -278,9 +306,10 @@ def scrape_profile(symbol: str, session) -> Dict:
 # Financial tables
 # ---------------------------------------------------------------------------
 
-def scrape_financial_tables(symbol: str, session) -> List[Dict]:
-    url = config.PSX_COMPANY_URL.format(symbol=symbol)
-    html = utils.fetch(url, session=session)
+def scrape_financial_tables(symbol: str, session, html: str = None) -> List[Dict]:
+    if html is None:                       # v3.3: reuse the page when provided
+        url = config.PSX_COMPANY_URL.format(symbol=symbol)
+        html = utils.fetch(url, session=session)
     if not html:
         return []
 
@@ -482,9 +511,10 @@ def scrape_price_history(symbol: str, session) -> List[Dict]:
 # Annual-report PDFs (gap-fill)
 # ---------------------------------------------------------------------------
 
-def find_report_links(symbol: str, session) -> List[Dict]:
-    url = config.PSX_COMPANY_URL.format(symbol=symbol)
-    html = utils.fetch(url, session=session)
+def find_report_links(symbol: str, session, html: str = None) -> List[Dict]:
+    if html is None:                      # v3.3: avoid re-downloading the page
+        url = config.PSX_COMPANY_URL.format(symbol=symbol)
+        html = utils.fetch(url, session=session)
     if not html:
         return []
 
@@ -573,6 +603,11 @@ _SA_MAP = {
     # Ratios
     "return on equity (roe)": "roe_pct",
     "return on assets (roa)": "roa_pct",
+    # v3.4 — S&P publishes ROIC itself, computed from the filed statements.
+    # This is the strongest possible tier-0 for the ROIC fundamental.
+    "return on capital (roic)": "roic_pct",
+    "return on invested capital (roic)": "roic_pct",
+    "return on capital employed (roce)": "roce_pct",
     "profit margin":        "profit_margin_pct",
     "operating margin":     "operating_margin_pct",
     "pe ratio":             "pe",
@@ -591,8 +626,9 @@ _SA_MAP = {
     "shares outstanding":   "shares",
 }
 
-_PCT_FIELDS = {"roe_pct","roa_pct","profit_margin_pct","operating_margin_pct",
-               "dividend_yield_pct","payout_ratio_pct","price_change_52w"}
+_PCT_FIELDS = {"roe_pct","roa_pct","roic_pct","roce_pct","profit_margin_pct",
+               "operating_margin_pct","dividend_yield_pct","payout_ratio_pct",
+               "price_change_52w"}
 
 
 def scrape_stockanalysis(symbol: str, session) -> Dict:
@@ -716,25 +752,50 @@ def scrape_stockanalysis(symbol: str, session) -> Dict:
 _SA_INCOME_URL  = "https://stockanalysis.com/quote/psx/{symbol}/financials/"
 _SA_BALANCE_URL = "https://stockanalysis.com/quote/psx/{symbol}/financials/balance-sheet/"
 
-_SA_STMT_MAP = {
-    # income statement
-    "revenue":                 "revenue",
-    "operating income":        "operating_profit",
-    "pretax income":           "profit_before_tax",
-    "income tax":              "income_tax",
-    "net income":              "net_profit",
-    "eps (basic)":             "eps",
-    "eps (diluted)":           "eps_diluted",
+# v3.3 — label matching is VARIANT-AWARE and prefix-based, because
+# StockAnalysis prints e.g. "Income Tax Expense" (not "Income Tax") and
+# "Total Current Liabilities". An exact-lookup map silently starved ROIC.
+# Rows that are ratios/derived ("... Growth", "... Margin", "(YoY)",
+# "Effective Tax Rate") are excluded before matching.
+_SA_STMT_FIELDS = [
+    # income statement (order matters: first match wins)
+    ("operating_profit",    ("operating income", "operating profit", "ebit")),
+    ("profit_before_tax",   ("pretax income", "profit before tax",
+                             "income before taxes", "earnings before tax")),
+    ("income_tax",          ("income tax expense", "income tax",
+                             "provision for income tax", "taxation")),
+    ("net_profit",          ("net income to common", "net income", "net profit")),
+    ("interest_expense",    ("interest expense",)),
+    ("interest_income",     ("interest & investment income", "interest and investment income",
+                             "interest income")),
+    ("eps",                 ("eps (basic)",)),
+    ("eps_diluted",         ("eps (diluted)",)),
+    ("revenue",             ("revenue", "total revenue", "net sales")),
     # balance sheet
-    "cash & equivalents":      "cash",
-    "cash & cash equivalents": "cash",
-    "total debt":              "total_debt",
-    "shareholders' equity":    "total_equity",
-    "total assets":            "total_assets",
-    "total liabilities":       "total_liabilities",
-    "working capital":         "working_capital",
-    "book value per share":    "book_value",
-}
+    ("cash",                ("cash & equivalents", "cash and equivalents",
+                             "cash & cash equivalents", "cash and cash equivalents")),
+    ("current_assets",      ("total current assets",)),
+    ("current_liabilities", ("total current liabilities",)),
+    ("total_debt",          ("total debt",)),
+    ("total_equity",        ("shareholders' equity", "shareholders equity",
+                             "stockholders' equity", "total equity")),
+    ("total_assets",        ("total assets",)),
+    ("total_liabilities",   ("total liabilities",)),
+    ("working_capital",     ("working capital",)),
+    ("book_value",          ("book value per share",)),
+]
+_SA_ROW_EXCLUDE = re.compile(r"growth|margin|\(yoy\)|effective tax|per share growth|yield", re.I)
+
+
+def _sa_stmt_field(label: str):
+    lab = label.lower().strip()
+    if not lab or _SA_ROW_EXCLUDE.search(lab):
+        return None
+    for field, variants in _SA_STMT_FIELDS:
+        for v in variants:
+            if lab == v or lab.startswith(v):
+                return field
+    return None
 
 _FY_COL_RE = re.compile(r"(?:FY\s*)?((?:19|20)\d{2})")
 
@@ -758,8 +819,7 @@ def _parse_sa_statement_table(soup, out: Dict[int, Dict]) -> int:
             cells = row.find_all(["td", "th"])
             if len(cells) < 2:
                 continue
-            label = _text(cells[0]).lower().strip()
-            field = _SA_STMT_MAP.get(label)
+            field = _sa_stmt_field(_text(cells[0]))
             if not field:
                 continue
             for ci, year in year_by_col.items():
@@ -949,7 +1009,7 @@ _ANNOUNCEMENT_DIV_RE = re.compile(
 )
 
 
-def scrape_dividends(symbol: str, session, profile: dict = None) -> Dict[int, float]:
+def scrape_dividends(symbol: str, session, profile: dict = None, html: str = None) -> Dict[int, float]:
     """
     Dedicated dividend scraper.  Tries multiple strategies:
       1. Scan announcement / corporate-action tables on the company page
@@ -958,8 +1018,9 @@ def scrape_dividends(symbol: str, session, profile: dict = None) -> Dict[int, fl
       3. Derive from dividend yield + share price if both are in the profile
     Returns {fiscal_year: dividend_per_share_amount}.
     """
-    url = config.PSX_COMPANY_URL.format(symbol=symbol)
-    html = utils.fetch(url, session=session)
+    if html is None:                       # v3.3: reuse the page when provided
+        url = config.PSX_COMPANY_URL.format(symbol=symbol)
+        html = utils.fetch(url, session=session)
     divs: Dict[int, float] = {}
 
     if not html:
@@ -1049,24 +1110,72 @@ def scrape_dividends(symbol: str, session, profile: dict = None) -> Dict[int, fl
 # ---------------------------------------------------------------------------
 
 def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
-    """Full scrape for one company. Always returns a dict; never raises."""
+    """
+    Full scrape for one company. Always returns a dict; never raises.
+
+    v3.3 PERFORMANCE ARCHITECTURE — identical data, a fraction of the time:
+      * the PSX company page is fetched ONCE and re-used by every parser
+        (profile, live price, financial tables, report links, dividends);
+      * all independent sources (price history, StockAnalysis statistics,
+        StockAnalysis annual statements, dividends) are fetched IN PARALLEL,
+        so wall time ≈ the slowest source instead of the sum of all of them;
+      * annual-report PDFs are NEVER downloaded inside a user request —
+        the persistent deep store is merged instantly, and any missing
+        symbol is queued for the background deep worker.
+    """
     symbol = symbol.strip().upper()
     session = utils.make_session()
     warnings: List[str] = []
     scraped_at = utils.now_iso()
+    utils.progress_reset(symbol)                       # v3.5: real progress
+    utils.progress_update(symbol, 4, "Contacting PSX…")
 
-    profile = scrape_profile(symbol, session)
+    # ---- Phase 0: ONE fetch of the company page --------------------------
+    page_html = utils.fetch(config.PSX_COMPANY_URL.format(symbol=symbol),
+                            session=session)
+    utils.progress_update(symbol, 16, "Reading company profile…")
+
+    profile = scrape_profile(symbol, session, html=page_html)
     if profile.get("_unavailable"):
         warnings.append("Company page could not be reached on PSX.")
 
-    financials = scrape_financial_tables(symbol, session)
-    if not financials:
-        warnings.append("Structured financial tables not found on the page.")
+    # ---- Phase 1: independent sources in parallel ------------------------
+    utils.progress_update(symbol, 24,
+                          "Collecting price history & filed statements…")
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="scrape") as ex:
+        f_hist = ex.submit(scrape_price_history, symbol, utils.make_session())
+        f_sa   = ex.submit(scrape_stockanalysis, symbol, utils.make_session())
+        f_stmt = ex.submit(scrape_sa_statements, symbol, utils.make_session())
+        f_divs = ex.submit(scrape_dividends, symbol, utils.make_session(),
+                           profile, page_html)
 
-    price_history = scrape_price_history(symbol, session)
+        # main thread keeps working on the already-downloaded page
+        financials = scrape_financial_tables(symbol, session, html=page_html)
+        if not financials:
+            warnings.append("Structured financial tables not found on the page.")
+        reports = find_report_links(symbol, session, html=page_html)
+        utils.progress_update(symbol, 34, "Parsing PSX financial tables…")
 
-    # Live price: dedicated endpoint → company page → last close
-    live_price = _scrape_live_price(symbol, session)
+        def _safe(fut, fallback):
+            try:
+                return fut.result()
+            except Exception as exc:  # noqa: BLE001
+                print(f"  [scrape] parallel task failed for {symbol}: {exc}")
+                return fallback
+
+        price_history = _safe(f_hist, [])
+        utils.progress_update(symbol, 46, "Price history received…")
+        sa_data       = _safe(f_sa, {})
+        utils.progress_update(symbol, 55, "Key statistics received (S&P Global)…")
+        sa_statements = _safe(f_stmt, {})
+        utils.progress_update(symbol, 64, "Annual statements received…")
+        dividend_map  = _safe(f_divs, {})
+        utils.progress_update(symbol, 70, "Dividend history received…")
+
+    # ---- Live price: company page → last close ---------------------------
+    live_price = _scrape_live_price(symbol, session) if page_html is None \
+        else _price_from_html(symbol, page_html)
     if live_price and live_price > 0:
         profile["price"] = live_price
         profile["_price_source"] = "live scrape"
@@ -1090,47 +1199,26 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
         if prev:
             profile["change_pct"] = round((last - prev) / prev * 100, 2)
 
-    # PDF gap-fill when financials are missing or sparse
-    reports = find_report_links(symbol, session)
-    if deep_pdf and reports and (not financials or _too_sparse(financials[-1])):
-        pdf_fields = parse_report_pdf(reports[0]["url"], session)
-        if pdf_fields:
-            year = reports[0].get("year") or datetime.now().year
-            target = None
-            for rec in financials:
-                if rec.get("year") == year:
-                    target = rec
-                    break
-            if target is None:
-                target = {"year": year, "_sources": {}}
-                financials.append(target)
-                financials.sort(key=lambda r: r["year"])
-            for k, v in pdf_fields.items():
-                if target.get(k) is None:
-                    target[k] = v
-                    target.setdefault("_sources", {})[k] = \
-                        f"annual report PDF ({reports[0].get('title', '')})"
-            warnings.append("Some figures were filled from the annual-report PDF.")
-
-    # --- Secondary source: StockAnalysis.com ---
-    # PSX's page lacks balance sheet, cash flow, ROE, D/E, current ratio,
-    # and dividend data. StockAnalysis.com (powered by S&P Global) has all of it.
-    sa_data = scrape_stockanalysis(symbol, session)
+    # ---- Merge secondary data --------------------------------------------
+    utils.progress_update(symbol, 76, "Merging sources…")
     _merge_secondary_data(financials, profile, sa_data, warnings)
 
-    # --- v3: multi-year as-filed statements (real ROIC / CCE inputs) ---
-    sa_statements = scrape_sa_statements(symbol, session)
-
-    # --- v3.2: deep official-filings fetch for whatever is still missing ---
+    # ---- v3.3: deep store merged INSTANTLY; fetching happens in background
     deep_info = {}
+    utils.progress_update(symbol, 82, "Merging official filed reports…")
     try:
         import deepdata                       # lazy import (avoids cycles)
         deep_info = deepdata.fill_gaps(symbol, financials, profile,
-                                       session=session)
+                                       session=session, allow_fetch=False,
+                                       psx_html=page_html)
         if deep_info.get("filled"):
             warnings.append(
                 f"{deep_info['filled']} figure(s) sourced directly from the "
                 f"company's official filed reports (see per-metric source links).")
+        if deep_info.get("queued"):
+            warnings.append(
+                "The company's official filed reports are being collected in "
+                "the background — re-run in a little while for even deeper data.")
     except Exception as exc:  # noqa: BLE001
         print(f"  [deep] skipped for {symbol}: {exc}")
 
@@ -1138,10 +1226,7 @@ def scrape_company(symbol: str, deep_pdf: bool = True) -> Dict:
     for rec in financials:
         _gap_fill_record(rec, profile=profile)
 
-    # --- Dedicated dividend scraping pass ---
-    # The main table parser often misses dividends because PSX shows them
-    # in announcement sections, not inside financial-statement tables.
-    dividend_map = scrape_dividends(symbol, session, profile)
+    # --- Dedicated dividend pass (fetched in parallel above) ---
     if dividend_map:
         for rec in financials:
             yr = rec.get("year")

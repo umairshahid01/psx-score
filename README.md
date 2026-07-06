@@ -71,6 +71,66 @@ push an update, everyone who runs the `.bat` gets it automatically.
 
 ### Files
 
+## v3.5 — Real progress bar
+
+- Both analysis buttons now show a **progress bar with a live percentage** under
+  the loading animation. It reports **genuine pipeline progress**, not a fake
+  animation: the scraper and scorer publish their actual stages (contacting
+  PSX → parsing tables → price history / statistics / statements received →
+  merging → scoring) through the new `GET /api/progress?symbol=X` endpoint,
+  and the dashboard polls it every ~0.4 s, tweening the bar smoothly toward the
+  latest real value with a bounded creep between stages so it is always visibly
+  alive. Stage text replaces the rotating messages the moment real stages
+  arrive; cache hits complete instantly at 100 %.
+
+## v3.4 — ROIC tier-0, version stamping & prewarm hygiene
+
+- **ROIC now has a tier-0:** S&P Global publishes "Return on Capital (ROIC)" on
+  the StockAnalysis statistics page, computed from the company's own filed
+  statements. It is captured in the same single fetch that already succeeds for
+  virtually every PSX stock, and used directly (with the exact-identity ladder
+  from v3.3 as fallback). ROIC is now effectively never N/A for a real company.
+- **Version stamping:** the console banner, `/api/health` and the dashboard
+  footer all show `v3.4.0`. PSX.bat re-downloads the code from GitHub at every
+  launch — **if the banner doesn't say v3.4.0, GitHub is still serving old
+  files** (this is exactly what happened with the "ROIC still N/A" report: the
+  log showed v3.2 fingerprints — dead price endpoints, old label counts).
+- **Prewarm hygiene:** sustainability reports, FAQs, rating press releases,
+  AGM notices, presentations etc. are blacklisted — never downloaded, never
+  parsed (the log showed a mobile-account FAQ PDF being fetched for figures).
+- **KSE-50 404 eliminated:** PSX publishes no KSE-50 index page; it is now
+  derived live as the top 50 of KSE-100 with zero network calls.
+
+## v3.3 — Performance overhaul, ROIC guarantee & real-world PDF fixes
+
+- **Analysis is now seconds, not minutes.** The PSX company page is fetched once
+  and re-used by every parser (it was being downloaded 4-5×); all independent
+  sources (price history, StockAnalysis statistics, annual statements, dividends)
+  are fetched **in parallel**; the three dead PSX price endpoints that were
+  burning retries on every search are removed; and 4xx responses now **fail
+  fast** (retries are reserved for transient 5xx/network errors).
+- **Annual-report PDFs never block a request anymore.** Deep fetching moved to a
+  **background queue** — the persistent store is merged instantly, missing
+  symbols are queued, and an incomplete symbol enters a 24-hour cooldown instead
+  of re-downloading the same 30 MB report on every click. Per-symbol locks stop
+  the prewarm and user requests from fetching the same document concurrently,
+  and the prewarm pauses while a user is actively analyzing.
+- **ROIC is now effectively guaranteed** for every real operating company, via a
+  ladder of EXACT accounting identities (never estimates): EBIT = reported
+  operating profit, or PBT + interest expense − interest income; tax = reported,
+  or PBT − net profit; invested capital = avg(debt + equity), year-end, or the
+  textbook total assets − current liabilities. The metric note states exactly
+  which construction was used.
+- **Bug fixed:** StockAnalysis labels rows "Income Tax Expense" / "Total Current
+  Liabilities" etc. — the old exact-match map silently missed them and starved
+  ROIC. Label matching is now variant-aware, with growth/margin/ratio rows
+  excluded.
+- **Bug fixed:** image-only (scanned/graphic) annual reports — like Lucky
+  Cement's — are detected up-front, recorded, and never re-downloaded. Optional
+  OCR can be enabled via `config.DEEPDATA["ocr"]` + `pip install
+  rapidocr-onnxruntime`. PDF parsing also early-exits once the required field
+  set is complete.
+
 ## v3.2 — Deep official-filings engine, ETF gating & UI polish
 
 - **`deepdata.py` (new):** when PSX tables and StockAnalysis still leave gaps, the

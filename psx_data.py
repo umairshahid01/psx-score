@@ -266,12 +266,17 @@ def build_universe(force_refresh: bool = False) -> dict:
 
     indices: Dict[str, List[str]] = {}
     for label, code in config.INDICES.items():
+        if not code:                      # derived index — nothing to fetch
+            continue
         members = fetch_index_members(code, session, valid)
         if members:
             indices[label] = members
         else:
             source = "mixed"
     indices.setdefault("ALLSHR", [s["symbol"] for s in symbols])
+    # v3.4: KSE-50 = the 50 largest KSE-100 constituents (live-derived)
+    if not indices.get("KSE50") and indices.get("KSE100"):
+        indices["KSE50"] = indices["KSE100"][:50]
 
     # Backfill any index we could not scrape with the fallback snapshot,
     # intersected with the live symbol set so it stays internally consistent.

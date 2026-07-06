@@ -16,6 +16,7 @@ import json
 import os
 import random
 import re
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -64,8 +65,13 @@ def fetch(url: str, *, session: Optional[requests.Session] = None,
             if as_json:
                 return resp.json()
             return resp.text
-        except Exception as exc:  # noqa: BLE001 - we want any failure to retry
+        except Exception as exc:  # noqa: BLE001
             last_err = exc
+            # 4xx responses are PERMANENT (dead endpoint / no such page).
+            # Retrying them just burns seconds — fail immediately.
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status is not None and 400 <= status < 500:
+                break
             if attempt < config.REQUEST_RETRIES:
                 time.sleep(delay)
                 delay *= config.REQUEST_BACKOFF
@@ -209,3 +215,34 @@ def cache_read(name: str, max_age_seconds: float) -> Optional[Any]:
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# ---------------------------------------------------------------------------
+# Analysis progress reporting (v3.5)
+# ---------------------------------------------------------------------------
+# The scraper and analyzer report REAL pipeline stages here; the dashboard
+# polls GET /api/progress and renders a live percentage — genuine progress,
+# not a fake animation.
+
+_progress_lock = threading.Lock()
+_progress: dict = {}
+
+
+def progress_reset(symbol: str) -> None:
+    with _progress_lock:
+        _progress[symbol.upper()] = {"pct": 0, "stage": ""}
+
+
+def progress_update(symbol: str, pct: float, stage: str = None) -> None:
+    """Monotonic within a run — a late-arriving lower stage never rewinds."""
+    with _progress_lock:
+        cur = _progress.setdefault(symbol.upper(), {"pct": 0, "stage": ""})
+        if pct >= cur["pct"]:
+            cur["pct"] = min(100, round(pct, 1))
+            if stage:
+                cur["stage"] = stage
+
+
+def progress_get(symbol: str) -> dict:
+    with _progress_lock:
+        return dict(_progress.get(symbol.upper(), {"pct": 0, "stage": ""}))
