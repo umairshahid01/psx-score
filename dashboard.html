@@ -897,9 +897,153 @@ html[data-theme="light"] .loader{background:rgba(238,242,248,.82)}
 @keyframes viewIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 .depth-cta-wrap.top{margin:10px auto 26px}
 @media(prefers-reduced-motion:reduce){.ripple,.coin-pop{display:none}.reco-card:hover .reco-medal{transform:none}}
+
+/* ================= v4.0 · BOOT LOADING PAGE ================= */
+#boot{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(1200px 700px at 50% 20%,#0e2b22 0%,#081a15 55%,#050f0c 100%);
+  transition:opacity .6s ease;overflow:hidden}
+#boot.hide{opacity:0;pointer-events:none}
+#boot.gone{display:none}
+body.booting{overflow:hidden}
+.boot-grid{position:absolute;inset:0;opacity:.10;pointer-events:none;
+  background-image:linear-gradient(rgba(0,229,160,.5) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(0,229,160,.5) 1px,transparent 1px);
+  background-size:44px 44px;
+  -webkit-mask-image:radial-gradient(70% 70% at 50% 45%,#000 30%,transparent 100%);
+          mask-image:radial-gradient(70% 70% at 50% 45%,#000 30%,transparent 100%)}
+.boot-ticker{position:absolute;top:0;left:0;right:0;height:34px;display:flex;align-items:center;overflow:hidden;
+  border-bottom:1px solid rgba(0,229,160,.15);background:rgba(4,17,13,.5)}
+.boot-ticker span{white-space:nowrap;font:600 12px 'JetBrains Mono',monospace;color:#3fd9a4;opacity:.75;
+  animation:bootTick 26s linear infinite;padding-left:100%}
+@keyframes bootTick{to{transform:translateX(-100%)}}
+.boot-coin{position:absolute;font-size:22px;opacity:0;pointer-events:none;filter:drop-shadow(0 4px 10px rgba(255,182,39,.25));
+  animation:bootFloat linear infinite}
+@keyframes bootFloat{0%{transform:translateY(14vh) rotate(0);opacity:0}
+  12%{opacity:.5}88%{opacity:.45}100%{transform:translateY(-110vh) rotate(340deg);opacity:0}}
+.boot-stage{position:relative;width:min(760px,94vw);display:flex;flex-direction:column;align-items:center;gap:6px;padding:20px}
+.boot-brand{display:flex;align-items:baseline;gap:10px;margin-bottom:2px}
+.boot-brand b{font:800 26px 'Space Grotesk';letter-spacing:-.4px;color:#eafff7}
+.boot-brand b .dot{color:var(--gold)}
+.boot-brand small{font:600 11px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#57b795}
+.boot-scene{position:relative;width:min(700px,92vw);height:318px}
+#boot-puzzle{position:absolute;left:50%;top:6px;transform:translateX(-58%);width:min(460px,72vw);height:auto;
+  filter:drop-shadow(0 18px 34px rgba(0,0,0,.5))}
+.bp-slot{fill:rgba(255,255,255,.028);stroke:rgba(0,229,160,.28);stroke-width:1.4;stroke-dasharray:5 5}
+.bp-piece{opacity:0;transition:opacity .28s ease,transform .34s cubic-bezier(.2,1.5,.4,1)}
+.bp-piece.on{opacity:1}
+.bp-edge{fill:none;stroke:rgba(5,15,12,.55);stroke-width:2.2;opacity:0;transition:opacity .3s}
+.bp-edge.on{opacity:1}
+#boot-pile{position:absolute;right:8px;bottom:14px;width:86px;height:96px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end}
+#boot-pile svg{width:52px;height:52px;margin-top:-30px;filter:drop-shadow(0 6px 12px rgba(0,0,0,.4));transition:opacity .3s,transform .3s}
+#boot-pile .pile-label{font:700 11px 'JetBrains Mono',monospace;color:#ffd479;background:rgba(255,182,39,.12);
+  border:1px solid rgba(255,182,39,.3);border-radius:999px;padding:3px 10px;margin-top:8px}
+#boot-buddy{position:absolute;bottom:6px;left:20px;width:96px;height:104px;will-change:left,transform;z-index:3}
+#boot-buddy .flip{transition:transform .18s;transform-origin:50% 50%;width:100%;height:100%}
+#boot-buddy.faceL .flip{transform:scaleX(-1)}
+#boot-buddy .bob{animation:buddyBob .55s ease-in-out infinite;width:100%;height:100%}
+#boot-buddy.idle .bob{animation:buddyIdle 1.6s ease-in-out infinite}
+#boot-buddy.jump .bob{animation:buddyJump .55s cubic-bezier(.3,1.6,.4,1) 2}
+@keyframes buddyBob{0%,100%{transform:translateY(0) rotate(-1.4deg)}50%{transform:translateY(-6px) rotate(1.4deg)}}
+@keyframes buddyIdle{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-3px) scale(1.015)}}
+@keyframes buddyJump{0%,100%{transform:translateY(0)}45%{transform:translateY(-26px) rotate(-4deg)}}
+#boot-buddy .leg{transform-origin:top center}
+#boot-buddy.walk .legA{animation:legSwing .4s ease-in-out infinite}
+#boot-buddy.walk .legB{animation:legSwing .4s ease-in-out infinite reverse}
+@keyframes legSwing{0%,100%{transform:rotate(16deg)}50%{transform:rotate(-16deg)}}
+#boot-carry{position:absolute;left:58px;top:34px;width:34px;height:34px;opacity:0;transform:scale(.6) rotate(-8deg);
+  transition:opacity .2s,transform .25s cubic-bezier(.2,1.5,.4,1)}
+#boot-buddy.carrying #boot-carry{opacity:1;transform:scale(1) rotate(6deg)}
+.boot-bar-wrap{width:min(520px,88vw);margin-top:2px}
+.boot-bar{height:14px;border-radius:9px;background:rgba(255,255,255,.06);border:1px solid rgba(0,229,160,.25);
+  overflow:hidden;position:relative}
+#boot-fill{height:100%;width:0%;border-radius:9px;background:linear-gradient(90deg,#00b57f,#00e5a0 60%,#ffd479);
+  box-shadow:0 0 16px rgba(0,229,160,.5);transition:width .45s cubic-bezier(.3,.8,.3,1);position:relative}
+#boot-fill::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);
+  animation:bootShine 1.6s linear infinite}
+@keyframes bootShine{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.boot-nums{display:flex;justify-content:space-between;align-items:baseline;margin-top:9px;gap:14px}
+#boot-pct{font:800 30px 'Space Grotesk';color:#eafff7;letter-spacing:-.5px;min-width:86px}
+#boot-pct small{font:700 15px 'Space Grotesk';color:#57b795}
+#boot-stage-txt{font:600 12.5px 'JetBrains Mono',monospace;color:#7fd9b8;text-align:right;flex:1;min-height:16px}
+.boot-tip{margin-top:14px;font:500 12.5px Inter,sans-serif;color:#4e8f77;text-align:center;max-width:520px;min-height:18px;
+  transition:opacity .4s}
+.boot-tip.fade{opacity:0}
+.boot-foot{position:absolute;bottom:14px;left:0;right:0;text-align:center;font:600 10.5px 'JetBrains Mono',monospace;
+  letter-spacing:.14em;text-transform:uppercase;color:#356d58}
+@media(prefers-reduced-motion:reduce){
+  #boot-fill::after,.boot-coin,.boot-ticker span{animation:none}
+  #boot-buddy{display:none}
+  .bp-piece{transition:opacity .2s}
+}
+@media(max-width:620px){.boot-scene{height:260px}#boot-buddy{width:74px;height:82px}#boot-pile svg{width:42px;height:42px}}
 </style>
 </head>
-<body>
+<body class="booting">
+<!-- ============ v4.0 · BOOT LOADING PAGE ============ -->
+<div id="boot" role="status" aria-live="polite">
+  <div class="boot-grid"></div>
+  <div class="boot-ticker"><span>KSE-100 ▲ &nbsp;·&nbsp; OGDC ₨211.40 ▲1.85% &nbsp;·&nbsp; LUCK ₨1,042 ▲2.4% &nbsp;·&nbsp; HBL ₨142.60 ▲0.9% &nbsp;·&nbsp; SYS ₨395 ▲3.6% &nbsp;·&nbsp; MEBL ▲ &nbsp;·&nbsp; ENGRO ₨312 ▼0.6% &nbsp;·&nbsp; FFC ▲ &nbsp;·&nbsp; MARI ▲ &nbsp;·&nbsp; PSO ▲ &nbsp;·&nbsp; MCB ▲ &nbsp;·&nbsp; UBL ▲ &nbsp;·&nbsp; every stock graded twice — business + chart &nbsp;·&nbsp;</span></div>
+  <div id="boot-coins" aria-hidden="true"></div>
+  <div class="boot-stage">
+    <div class="boot-brand"><b>PSX<span class="dot">·</span>SCORE</b><small>Stock Health Analyzer</small></div>
+    <div class="boot-scene">
+      <svg id="boot-puzzle" viewBox="0 0 480 250" aria-hidden="true"></svg>
+      <div id="boot-pile" aria-hidden="true"><div class="pile-label" id="boot-pile-n">12 pieces</div></div>
+      <div id="boot-buddy" class="idle" aria-hidden="true">
+        <div class="flip"><div class="bob">
+          <svg viewBox="0 0 120 130" width="100%" height="100%">
+            <defs>
+              <linearGradient id="bull-g" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#2fe0a8"/><stop offset="1" stop-color="#0e9a6d"/>
+              </linearGradient>
+              <radialGradient id="coin-g" cx="35%" cy="30%" r="80%">
+                <stop offset="0" stop-color="#ffe9a8"/><stop offset=".6" stop-color="#ffb627"/><stop offset="1" stop-color="#c98a00"/>
+              </radialGradient>
+            </defs>
+            <!-- legs -->
+            <g class="leg legA"><rect x="38" y="96" width="12" height="26" rx="6" fill="#0c8a61"/><ellipse cx="44" cy="123" rx="9" ry="5" fill="#08543c"/></g>
+            <g class="leg legB"><rect x="66" y="96" width="12" height="26" rx="6" fill="#0c8a61"/><ellipse cx="72" cy="123" rx="9" ry="5" fill="#08543c"/></g>
+            <!-- tail -->
+            <path d="M18 74 q-10 4 -8 14 q1 6 8 7" fill="none" stroke="#0c8a61" stroke-width="5" stroke-linecap="round"/>
+            <circle cx="17" cy="96" r="5" fill="#ffb627"/>
+            <!-- body -->
+            <ellipse cx="58" cy="76" rx="40" ry="32" fill="url(#bull-g)"/>
+            <!-- coin belly -->
+            <circle cx="58" cy="80" r="16" fill="url(#coin-g)" stroke="#a87200" stroke-width="1.6"/>
+            <text x="58" y="86" text-anchor="middle" font-family="'Space Grotesk',sans-serif" font-weight="800" font-size="15" fill="#5c3d00">₨</text>
+            <!-- head -->
+            <circle cx="84" cy="42" r="24" fill="url(#bull-g)"/>
+            <!-- horns -->
+            <path d="M66 26 q-8 -12 2 -18 q-1 10 6 13" fill="#ffe9c4"/>
+            <path d="M100 24 q7 -13 -3 -18 q1 10 -6 13" fill="#ffe9c4"/>
+            <!-- ears -->
+            <ellipse cx="64" cy="34" rx="6" ry="4" fill="#0c8a61" transform="rotate(-30 64 34)"/>
+            <!-- eyes -->
+            <circle cx="82" cy="38" r="3.4" fill="#04140f"/><circle cx="95" cy="38" r="3.4" fill="#04140f"/>
+            <circle cx="83" cy="37" r="1.1" fill="#fff"/><circle cx="96" cy="37" r="1.1" fill="#fff"/>
+            <!-- snout -->
+            <ellipse cx="90" cy="52" rx="13" ry="9" fill="#7ef0c8"/>
+            <circle cx="86" cy="52" r="1.8" fill="#0a6b4b"/><circle cx="94" cy="52" r="1.8" fill="#0a6b4b"/>
+            <path d="M84 58 q6 4 12 0" fill="none" stroke="#0a6b4b" stroke-width="2" stroke-linecap="round"/>
+            <!-- arm -->
+            <path d="M78 74 q14 4 18 -6" fill="none" stroke="#0c8a61" stroke-width="9" stroke-linecap="round"/>
+          </svg>
+          <svg id="boot-carry" viewBox="0 0 60 60"><path id="boot-carry-path" fill="url(#coin-g)" stroke="#a87200" stroke-width="2"/></svg>
+        </div></div>
+      </div>
+    </div>
+    <div class="boot-bar-wrap">
+      <div class="boot-bar"><div id="boot-fill"></div></div>
+      <div class="boot-nums">
+        <div id="boot-pct">0<small>%</small></div>
+        <div id="boot-stage-txt">Waking the engines…</div>
+      </div>
+    </div>
+    <div class="boot-tip" id="boot-tip">Every stock is graded twice — business + chart — blended into one honest score.</div>
+  </div>
+  <div class="boot-foot">Built from public PSX data · v4.0 · A compass, not a captain</div>
+</div>
+
 <div id="bg-glow"></div>
 <div id="bg-grid"></div>
 <canvas id="bg-canvas"></canvas>
@@ -3310,15 +3454,9 @@ function rankListsJS(cands,kse30Arr,th){
   const rows=cands.map(r=>{
     const b=r.blue_score!=null?r.blue_score:blueScoreJS(r,kse30);
     return Object.assign({},r,{blue_score:+(+b).toFixed(1)});});
-  const byBest=[...rows].sort((a,b)=>(b.scores.combined-a.scores.combined)||((b.structure!=='downtrend')-(a.structure!=='downtrend')));
-  const top=byBest.filter(r=>r.scores.combined>=th.top_min).slice(0,th.top_n).map((r,i)=>Object.assign({},r,{rank:i+1}));
-  const topSyms=new Set(top.map(r=>r.symbol));
-  const avoid=[];[...rows].sort((a,b)=>(a.scores.combined-b.scores.combined)).forEach(r=>{
-    if(avoid.length>=th.avoid_n||topSyms.has(r.symbol)||r.scores.combined>th.avoid_max)return;
-    const a=Object.assign({},r,{rank:avoid.length+1});
-    a.why=(a.why_avoid)||(a.symbol+' sits at the BOTTOM of this scan with an overall '+a.scores.combined.toFixed(0)+'/100'+
-      (a.structure==='downtrend'?' and a price that keeps making lower lows':'')+' \u2014 the same engines that pick the top list say: look elsewhere.');
-    avoid.push(a);});
+  /* v4.0.1 EXCLUSIVITY RULE — blue chips are picked FIRST and claim their
+     symbols; a stock in the Blue-Chip column never re-appears in Top-5 or
+     Stay-Away. Mirrors recommend._rank_lists() exactly. */
   const blue=[];[...rows].sort((a,b)=>b.blue_score-a.blue_score).forEach(r=>{
     if(blue.length>=th.blue_n||r.blue_score<th.blue_min||r.scores.fundamental<50)return;
     const b=Object.assign({},r,{rank:blue.length+1});
@@ -3329,6 +3467,16 @@ function rankListsJS(cands,kse30Arr,th){
     b.why=b.symbol+' fits the classic PSX blue-chip mould \u2014 '+(traits.slice(0,3).join(', ')||'broad financial strength')+
       ' \u2014 on top of a '+b.scores.fundamental.toFixed(0)+'/100 business health score. Blue-chip grade: '+b.blue_score.toFixed(0)+'/100.';
     blue.push(b);});
+  const blueSyms=new Set(blue.map(r=>r.symbol));
+  const byBest=[...rows].sort((a,b)=>(b.scores.combined-a.scores.combined)||((b.structure!=='downtrend')-(a.structure!=='downtrend')));
+  const top=byBest.filter(r=>!blueSyms.has(r.symbol)&&r.scores.combined>=th.top_min).slice(0,th.top_n).map((r,i)=>Object.assign({},r,{rank:i+1}));
+  const taken=new Set([...blueSyms,...top.map(r=>r.symbol)]);
+  const avoid=[];[...rows].sort((a,b)=>(a.scores.combined-b.scores.combined)).forEach(r=>{
+    if(avoid.length>=th.avoid_n||taken.has(r.symbol)||r.scores.combined>th.avoid_max)return;
+    const a=Object.assign({},r,{rank:avoid.length+1});
+    a.why=(a.why_avoid)||(a.symbol+' sits at the BOTTOM of this scan with an overall '+a.scores.combined.toFixed(0)+'/100'+
+      (a.structure==='downtrend'?' and a price that keeps making lower lows':'')+' \u2014 the same engines that pick the top list say: look elsewhere.');
+    avoid.push(a);});
   return {top,avoid,blue};
 }
 
@@ -3466,6 +3614,7 @@ async function initRecommendations(){
         const first=!RECO_PAYLOAD;
         RECO_PAYLOAD=p;build.style.display='none';
         if(first)initRangeSlider(p.price_bounds||{min:0,max:1000});
+        BOOT.done();   // v4.0 — lists can generate instantly: boot page may finish
         if(p.refreshing){RECO_TIMER=setTimeout(poll,25000);}
         else if(RECO_TIMER){clearTimeout(RECO_TIMER);RECO_TIMER=null;}
         return;
@@ -3473,15 +3622,18 @@ async function initRecommendations(){
       build.style.display='block';
       if(p.status==='building'){
         const pr=p.progress||{},pct=pr.total?Math.round(pr.done/pr.total*100):5;
+        BOOT.reco(pr.done||0,pr.total||0,pr.current||'');   // v4.0 — real % on the boot page
         $('reco-load-text').textContent='Scanning '+(pr.current?pr.current+' ':'')+'('+(pr.done||0)+'/'+(pr.total||'\u2026')+') \u2014 grading the KSE-100 on 12 parallel engines\u2026';
         $('reco-progress-fill').style.width=Math.max(5,pct)+'%';
         $('rp-sub').textContent='First scan in progress \u2014 the slider unlocks the moment it lands\u2026';
-        RECO_TIMER=setTimeout(poll,3000);return;
+        RECO_TIMER=setTimeout(poll,2000);return;
       }
+      BOOT.stage('Ranking engine warming up\u2026');
       $('reco-load-text').textContent='Ranking engine warming up\u2026';
-      RECO_TIMER=setTimeout(poll,5000);
-    }catch(e){$('reco-load-text').textContent='Engine unreachable \u2014 retrying\u2026';
-      RECO_TIMER=setTimeout(poll,8000);}
+      RECO_TIMER=setTimeout(poll,3000);
+    }catch(e){BOOT.stage('Engine unreachable \u2014 retrying\u2026');
+      $('reco-load-text').textContent='Engine unreachable \u2014 retrying\u2026';
+      RECO_TIMER=setTimeout(poll,5000);}
   };
   poll();
 }
@@ -3542,7 +3694,242 @@ function setMode(live){
   if(live){b.textContent='LIVE';b.className='badge-mode live';$('market-txt').textContent='PSX Live';}
   else{b.textContent='DEMO';b.className='badge-mode demo';$('market-txt').textContent='Demo Preview';}
 }
+/* =================================================================
+   v4.0 · BOOT LOADING PAGE — an animated bull builds a "PSX" jigsaw
+   while the real data pipeline (universe + KSE-100 ranking scan)
+   loads. The progress bar shows REAL loading percentage; the app is
+   revealed only when Generate Lists can respond instantly.
+   ================================================================= */
+const BOOT=(()=>{
+  const COLS=4,ROWS=3,W=480,H=250,PW=W/COLS,PH=H/ROWS,N=COLS*ROWS;
+  let pieces=[],placed=0,target=0,shown=0,doneFlag=false,finished=false;
+  let buddyBusy=false,minShowUntil=0,tickTimer=null,tipTimer=null;
+
+  /* ---- jigsaw edges (knob: neck-in, round head, neck-out) ---- */
+  function edgeH(x0,y,x1,s){ // left→right along y; s: 0 flat, ±1 knob down/up
+    if(!s)return`L ${x1} ${y} `;
+    const L=x1-x0,d=s*PH*.26,n=s*PH*.07;
+    return`L ${x0+.36*L} ${y} C ${x0+.44*L} ${y} ${x0+.42*L} ${y+n} ${x0+.44*L} ${y+n*1.6} `+
+      `C ${x0+.30*L} ${y+d} ${x0+.70*L} ${y+d} ${x0+.56*L} ${y+n*1.6} `+
+      `C ${x0+.58*L} ${y+n} ${x0+.56*L} ${y} ${x0+.64*L} ${y} L ${x1} ${y} `;
+  }
+  function edgeHrev(x1,y,x0,s){ // right→left along y (mirror of edgeH)
+    if(!s)return`L ${x0} ${y} `;
+    const L=x1-x0,d=s*PH*.26,n=s*PH*.07;
+    return`L ${x1-.36*L} ${y} C ${x1-.44*L} ${y} ${x1-.42*L} ${y+n} ${x1-.44*L} ${y+n*1.6} `+
+      `C ${x1-.30*L} ${y+d} ${x1-.70*L} ${y+d} ${x1-.56*L} ${y+n*1.6} `+
+      `C ${x1-.58*L} ${y+n} ${x1-.56*L} ${y} ${x1-.64*L} ${y} L ${x0} ${y} `;
+  }
+  function edgeV(x,y0,y1,s){ // top→bottom along x
+    if(!s)return`L ${x} ${y1} `;
+    const L=y1-y0,d=s*PW*.26,n=s*PW*.07;
+    return`L ${x} ${y0+.36*L} C ${x} ${y0+.44*L} ${x+n} ${y0+.42*L} ${x+n*1.6} ${y0+.44*L} `+
+      `C ${x+d} ${y0+.30*L} ${x+d} ${y0+.70*L} ${x+n*1.6} ${y0+.56*L} `+
+      `C ${x+n} ${y0+.58*L} ${x} ${y0+.56*L} ${x} ${y0+.64*L} L ${x} ${y1} `;
+  }
+  function edgeVrev(x,y1,y0,s){ // bottom→top along x (mirror of edgeV)
+    if(!s)return`L ${x} ${y0} `;
+    const L=y1-y0,d=s*PW*.26,n=s*PW*.07;
+    return`L ${x} ${y1-.36*L} C ${x} ${y1-.44*L} ${x+n} ${y1-.42*L} ${x+n*1.6} ${y1-.44*L} `+
+      `C ${x+d} ${y1-.30*L} ${x+d} ${y1-.70*L} ${x+n*1.6} ${y1-.56*L} `+
+      `C ${x+n} ${y1-.58*L} ${x} ${y1-.56*L} ${x} ${y1-.64*L} L ${x} ${y0} `;
+  }
+  function buildPuzzle(){
+    const svg=$('boot-puzzle');if(!svg)return;
+    const NS='http://www.w3.org/2000/svg';
+    // deterministic tab signs — organic look, always interlocking
+    const seed=(i)=>((i*2654435761)>>>0)%2?1:-1;
+    const hTab=[],vTab=[];
+    for(let r=0;r<ROWS-1;r++){hTab[r]=[];for(let c=0;c<COLS;c++)hTab[r][c]=seed(r*7+c*3+1);}
+    for(let r=0;r<ROWS;r++){vTab[r]=[];for(let c=0;c<COLS-1;c++)vTab[r][c]=seed(r*5+c*11+2);}
+    const piecePath=(r,c)=>{
+      const x0=c*PW,y0=r*PH,x1=x0+PW,y1=y0+PH;
+      let d=`M ${x0} ${y0} `;
+      d+=(r===0)   ?`L ${x1} ${y0} `:edgeH(x0,y0,x1,hTab[r-1][c]);      // top (shared knob)
+      d+=(c===COLS-1)?`L ${x1} ${y1} `:edgeV(x1,y0,y1,vTab[r][c]);      // right
+      d+=(r===ROWS-1)?`L ${x0} ${y1} `:edgeHrev(x1,y1,x0,hTab[r][c]);   // bottom
+      d+=(c===0)   ?`Z`:edgeVrev(x0,y1,y0,vTab[r][c-1])+'Z';            // left
+      return d;
+    };
+    // ---- artwork: money-green card, candlesticks, bold PSX ----
+    svg.innerHTML=`<defs>
+      <linearGradient id="bp-bg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#0f3f30"/><stop offset=".55" stop-color="#0b5c41"/><stop offset="1" stop-color="#0e7a54"/>
+      </linearGradient>
+      <linearGradient id="bp-txt" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#eafff7"/><stop offset=".6" stop-color="#9df3d4"/><stop offset="1" stop-color="#ffd479"/>
+      </linearGradient>
+      <g id="bp-art">
+        <rect x="0" y="0" width="${W}" height="${H}" rx="14" fill="url(#bp-bg)"/>
+        <g opacity=".22" stroke-linecap="round">
+          <line x1="52" y1="196" x2="52" y2="120" stroke="#7ef0c8" stroke-width="3"/><rect x="44" y="132" width="16" height="42" rx="3" fill="#7ef0c8"/>
+          <line x1="96" y1="188" x2="96" y2="96" stroke="#7ef0c8" stroke-width="3"/><rect x="88" y="110" width="16" height="50" rx="3" fill="#7ef0c8"/>
+          <line x1="384" y1="182" x2="384" y2="88" stroke="#ffd479" stroke-width="3"/><rect x="376" y="100" width="16" height="52" rx="3" fill="#ffd479"/>
+          <line x1="428" y1="170" x2="428" y2="64" stroke="#ffd479" stroke-width="3"/><rect x="420" y="78" width="16" height="60" rx="3" fill="#ffd479"/>
+          <polyline points="30,208 110,168 190,186 300,120 450,58" fill="none" stroke="#ffe9a8" stroke-width="4"/>
+        </g>
+        <text x="${W/2}" y="158" text-anchor="middle" font-family="'Space Grotesk',sans-serif" font-weight="800"
+              font-size="118" letter-spacing="4" fill="url(#bp-txt)" stroke="#04140f" stroke-width="3" paint-order="stroke">PSX</text>
+        <text x="${W/2}" y="206" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-weight="700"
+              font-size="17" letter-spacing="10" fill="#bff5df">·SCORE·</text>
+      </g></defs>`;
+    const defs=svg.querySelector('defs');
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const i=r*COLS+c,d=piecePath(r,c);
+      const cp=document.createElementNS(NS,'clipPath');cp.id='bp-clip-'+i;
+      const cpp=document.createElementNS(NS,'path');cpp.setAttribute('d',d);cp.appendChild(cpp);
+      defs.appendChild(cp);
+      const slot=document.createElementNS(NS,'path');slot.setAttribute('d',d);slot.setAttribute('class','bp-slot');
+      svg.appendChild(slot);
+      const g=document.createElementNS(NS,'g');g.setAttribute('class','bp-piece');g.id='bp-piece-'+i;
+      const cx=c*PW+PW/2,cy=r*PH+PH/2;
+      g.style.transform=`translate(${(Math.random()*30-15)}px,${-30-Math.random()*20}px) scale(.7)`;
+      g.style.transformOrigin=`${cx}px ${cy}px`;
+      const use=document.createElementNS(NS,'use');
+      use.setAttribute('href','#bp-art');use.setAttributeNS('http://www.w3.org/1999/xlink','xlink:href','#bp-art');
+      use.setAttribute('clip-path',`url(#bp-clip-${i})`);
+      g.appendChild(use);svg.appendChild(g);
+      const edge=document.createElementNS(NS,'path');edge.setAttribute('d',d);edge.setAttribute('class','bp-edge');edge.id='bp-edge-'+i;
+      svg.appendChild(edge);
+      pieces.push({i,r,c,cx,cy,d});
+    }
+    // pile of pieces (visual stack)
+    const pile=$('boot-pile');
+    for(let k=0;k<3&&pile;k++){
+      const s=document.createElementNS(NS,'svg');s.setAttribute('viewBox','-10 -10 140 110');s.classList.add('pile-bit');
+      s.innerHTML=`<path d="${pieces[k].d}" transform="translate(${-pieces[k].cx+60} ${-pieces[k].cy+45})" fill="#ffb627" stroke="#a87200" stroke-width="3"/>`;
+      pile.insertBefore(s,pile.firstChild);
+    }
+  }
+  const pileN=()=>{const el=$('boot-pile-n');if(el)el.textContent=Math.max(0,N-placed)+' pieces';
+    [...document.querySelectorAll('#boot-pile .pile-bit')].forEach((b,k)=>{b.style.opacity=(N-placed)>k?String(1-k*.22):'0';});};
+
+  function placePiece(i){
+    const g=$('bp-piece-'+i),e=$('bp-edge-'+i);if(!g||g.classList.contains('on'))return;
+    g.classList.add('on');g.style.transform='translate(0,0) scale(1)';
+    if(e)e.classList.add('on');placed++;pileN();
+  }
+
+  /* ---- bull state machine: pile → carry → slot → pop ---- */
+  const buddy=()=>$('boot-buddy');
+  function sceneW(){const s=document.querySelector('.boot-scene');return s?s.clientWidth:700;}
+  function puzzleRect(){const p=$('boot-puzzle');return p?{left:p.offsetLeft,width:p.clientWidth||440}:{left:110,width:440};}
+  function walkTo(x,cb){
+    const b=buddy();if(!b)return cb&&cb();
+    const cur=parseFloat(b.style.left||'20');
+    const dist=Math.abs(x-cur),dur=Math.max(.26,Math.min(1.3,dist/(doneFlag?640:300)));
+    b.classList.remove('idle');b.classList.add('walk');
+    b.classList.toggle('faceL',x<cur);
+    b.style.transition=`left ${dur}s linear`;b.style.left=x+'px';
+    setTimeout(()=>{b.classList.remove('walk');cb&&cb();},dur*1000+30);
+  }
+  function buddyLoop(){
+    if(finished)return;
+    const want=Math.min(N,Math.floor((doneFlag?100:target)/100*N+1e-6));
+    if(placed>=want||placed>=N||buddyBusy){
+      const b=buddy();if(b&&!buddyBusy)b.classList.add('idle');
+      setTimeout(buddyLoop,220);return;}
+    buddyBusy=true;
+    const b=buddy(),piece=pieces[placed],pr=puzzleRect();
+    const carry=$('boot-carry-path');
+    if(carry){carry.setAttribute('d',piece.d);
+      carry.setAttribute('transform',`scale(.42) translate(${-piece.cx+72} ${-piece.cy+72})`);}
+    const pileX=sceneW()-160;
+    walkTo(pileX,()=>{                       // 1) walk to the pile
+      if(finished)return;
+      b.classList.add('carrying');           // 2) grab a piece
+      setTimeout(()=>{
+        if(finished)return;
+        const scale=pr.width/W;
+        const slotX=Math.max(4,pr.left+piece.cx*scale-48);
+        walkTo(slotX,()=>{                   // 3) carry it to its column
+          if(finished)return;
+          b.classList.remove('carrying');
+          placePiece(piece.i);               // 4) pop it into the board
+          buddyBusy=false;
+          setTimeout(buddyLoop,90);
+        });
+      },260);
+    });
+  }
+  /* reduced motion: no character — pieces simply appear with progress */
+  function reducedSync(){
+    if(finished)return;
+    const want=Math.min(N,Math.floor((doneFlag?100:target)/100*N+1e-6));
+    while(placed<want)placePiece(pieces[placed].i);
+    setTimeout(reducedSync,400);
+  }
+
+  /* ---- % ticker (smooth tween toward the real target) ---- */
+  function tick(){
+    const goal=doneFlag?100:Math.min(target,97);
+    if(shown<goal)shown=Math.min(goal,shown+Math.max(.4,(goal-shown)*.09));
+    const f=$('boot-fill'),p=$('boot-pct');
+    if(f)f.style.width=shown+'%';
+    if(p)p.innerHTML=Math.floor(shown)+'<small>%</small>';
+    if(doneFlag&&shown>=99.5&&placed>=N&&Date.now()>=minShowUntil)return reveal();
+    tickTimer=setTimeout(tick,60);
+  }
+  const TIPS=['Every stock is graded twice \u2014 business + chart \u2014 blended into one honest score.',
+    'Blue chips are large, seasoned, dividend-paying KSE-100 heavyweights.',
+    '\u201cMaterial Information\u201d filings are read end-to-end \u2014 verdicts come from the document\u2019s own words.',
+    'A compass, not a captain \u2014 PSX\u00b7SCORE informs, it never decides for you.',
+    'The Stay-Away list uses the same engines as the Top-5 \u2014 just read upside-down.',
+    'Slide your price range, then Generate \u2014 lists are filtered instantly on your device.'];
+  let tipI=0;
+  function rotateTips(){const el=$('boot-tip');if(!el||finished)return;
+    el.classList.add('fade');
+    setTimeout(()=>{tipI=(tipI+1)%TIPS.length;el.textContent=TIPS[tipI];el.classList.remove('fade');},420);
+    tipTimer=setTimeout(rotateTips,4200);}
+  function coins(){
+    if(REDUCED)return;const box=$('boot-coins');if(!box)return;
+    const EMO=['\ud83e\ude99','\ud83d\udcb0','\ud83d\udcc8','\ud83d\udcb9','\ud83e\ude99','\ud83d\udcca'];
+    for(let k=0;k<10;k++){const s=document.createElement('span');s.className='boot-coin';
+      s.textContent=EMO[k%EMO.length];
+      s.style.left=(4+Math.random()*92)+'vw';s.style.bottom='-6vh';
+      s.style.animationDuration=(9+Math.random()*9)+'s';s.style.animationDelay=(Math.random()*8)+'s';
+      s.style.fontSize=(15+Math.random()*16)+'px';box.appendChild(s);}
+  }
+  function reveal(){
+    if(finished)return;finished=true;
+    clearTimeout(tickTimer);clearTimeout(tipTimer);
+    const f=$('boot-fill'),pp=$('boot-pct');
+    if(f)f.style.width='100%';
+    if(pp)pp.innerHTML='100<small>%</small>';
+    const b=buddy();if(b){b.classList.remove('walk','carrying');b.classList.add('jump');}
+    const st=$('boot-stage-txt');if(st)st.textContent='Ready \u2014 opening PSX\u00b7SCORE \u2714';
+    const ov=$('boot');
+    setTimeout(()=>{if(ov)ov.classList.add('hide');document.body.classList.remove('booting');},650);
+    setTimeout(()=>{if(ov)ov.classList.add('gone');},1350);
+  }
+  /* when the pipeline says DONE, remaining pieces rain in fast — the app
+     appears the moment the last one lands (min showtime keeps it smooth) */
+  function finishSweep(){
+    let k=0;
+    for(let i=placed;i<N;i++,k++)setTimeout(((j)=>()=>placePiece(pieces[j].i))(i),200+k*90);
+  }
+  return{
+    start(){buildPuzzle();pileN();coins();rotateTips();tick();
+      minShowUntil=Date.now()+2400;
+      if(REDUCED){reducedSync();}
+      else{const b=buddy();if(b)b.style.left='20px';setTimeout(buddyLoop,350);}},
+    stage(t){const el=$('boot-stage-txt');if(el&&!finished)el.textContent=t;},
+    setTarget(p,t){target=Math.max(target,Math.min(97,p));if(t)this.stage(t);},
+    uniReady(){this.setTarget(12,'Stock universe loaded \u2014 grading the KSE-100\u2026');},
+    reco(done,total,current){const p=12+84*(total?done/total:0);
+      this.setTarget(p,'Scanning '+(current?current+' ':'')+'('+(done||0)+'/'+(total||'\u2026')+') on 12 parallel engines\u2026');},
+    done(){if(doneFlag)return;doneFlag=true;target=100;
+      this.stage('All data loaded \u2014 placing the last pieces\u2026');
+      setTimeout(finishSweep,REDUCED?0:150);},
+    demo(){this.setTarget(30,'Demo bundle unpacked \u2014 preparing 7 companies\u2026');
+      let p=30;const step=()=>{p+=9+Math.random()*8;if(p>=100){this.done();return;}
+        this.setTarget(p);setTimeout(step,180);};setTimeout(step,240);}
+  };
+})();
+
 async function init(){
+  // v4.0 — the boot loading page owns the screen until data is truly ready
+  BOOT.start();
   // theme
   let theme='dark';try{theme=localStorage.getItem('psx-theme')||'dark';}catch(e){}
   setTheme(theme);
@@ -3552,11 +3939,15 @@ async function init(){
   // effects
   initBgParticles();
   // mode detection
+  BOOT.setTarget(4,'Looking for the live engine\u2026');
   LIVE=await pingBackend();
   setMode(LIVE);
+  BOOT.setTarget(6,LIVE?'Live engine found \u2014 loading the stock universe\u2026':'No live engine \u2014 unpacking the demo bundle\u2026');
   await loadUniverse();
+  BOOT.uniReady();
   // v4.0 — fill the Top Recommended Stocks section (non-blocking)
   initRecommendations();
+  if(!LIVE)BOOT.demo();
   // search wiring
   wireSearch('stock-input','dropdown',(sym)=>{selectedSymbol=sym;$('stock-input').value=sym;$('dropdown').classList.remove('open');});
   // v4.0 — view router: landing rankings <-> individual-stock workbench.

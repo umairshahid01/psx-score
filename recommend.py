@@ -425,31 +425,14 @@ def _avoid_line(sym: str, r: Dict) -> str:
 def _rank_lists(results: List[Dict], kse30: set) -> Dict:
     """Build the three landing lists from evaluated KSE-100 candidates.
     Every list is THRESHOLDED — a stock must genuinely qualify, so lists may
-    hold fewer than their max (or none). No filler, ever."""
+    hold fewer than their max (or none). No filler, ever.
+    v4.0.1 EXCLUSIVITY RULE — the Blue-Chip list is picked FIRST and its
+    members are removed from the Top-5 and Stay-Away pools, so no stock
+    ever appears in two lists at once."""
     for r in results:
         r["blue_score"] = _blue_chip_score(r, kse30)
 
-    by_best = sorted(results, key=lambda r: (r["scores"]["combined"],
-                                             r.get("structure") != "downtrend"),
-                     reverse=True)
-    top = [r for r in by_best if r["scores"]["combined"] >= _TOP_MIN][:_TOP_N]
-    for i, p in enumerate(top, 1):
-        p["rank"] = i
-
-    top_syms = {p["symbol"] for p in top}
-    by_worst = sorted(results, key=lambda r: (r["scores"]["combined"],
-                                              r.get("structure") != "downtrend"))
-    avoid = []
-    for r in by_worst:
-        if r["symbol"] in top_syms or r["scores"]["combined"] > _AVOID_MAX:
-            continue
-        a = dict(r)
-        a["rank"] = len(avoid) + 1
-        a["why"] = _avoid_line(a["symbol"], a)
-        avoid.append(a)
-        if len(avoid) >= _AVOID_N:
-            break
-
+    # ---- 1) Blue chips first (they claim their symbols exclusively) -------
     by_blue = sorted(results, key=lambda r: r.get("blue_score", 0), reverse=True)
     blue = []
     for r in by_blue:
@@ -460,6 +443,32 @@ def _rank_lists(results: List[Dict], kse30: set) -> Dict:
         b["why"] = _blue_line(b["symbol"], b, kse30)
         blue.append(b)
         if len(blue) >= _BLUE_N:
+            break
+    blue_syms = {b["symbol"] for b in blue}
+
+    # ---- 2) Top picks — blue chips excluded --------------------------------
+    by_best = sorted(results, key=lambda r: (r["scores"]["combined"],
+                                             r.get("structure") != "downtrend"),
+                     reverse=True)
+    top = [r for r in by_best
+           if r["symbol"] not in blue_syms
+           and r["scores"]["combined"] >= _TOP_MIN][:_TOP_N]
+    for i, p in enumerate(top, 1):
+        p["rank"] = i
+
+    # ---- 3) Stay-away — blue chips AND top picks excluded ------------------
+    taken = blue_syms | {p["symbol"] for p in top}
+    by_worst = sorted(results, key=lambda r: (r["scores"]["combined"],
+                                              r.get("structure") != "downtrend"))
+    avoid = []
+    for r in by_worst:
+        if r["symbol"] in taken or r["scores"]["combined"] > _AVOID_MAX:
+            continue
+        a = dict(r)
+        a["rank"] = len(avoid) + 1
+        a["why"] = _avoid_line(a["symbol"], a)
+        avoid.append(a)
+        if len(avoid) >= _AVOID_N:
             break
     return {"top": top, "avoid": avoid, "blue": blue}
 

@@ -674,6 +674,11 @@ def score_company(scrape: Dict) -> Dict:
         "reports":      scrape.get("reports", []),
         "price_history": scrape.get("price_history", []),
         "announcements": scrape.get("announcements"),   # v3.6: real PSX filings
+        "material_info": scrape.get("material_info"),   # v4.0: MI letters read end-to-end
+                                                        # (this passthrough was missing —
+                                                        # the dashboard reads d.material_info
+                                                        # from THIS payload, so dropping it
+                                                        # here blanked MI for every stock)
         "source_urls":  urls,
         "scraped_at":   scrape.get("scraped_at"),
     }
