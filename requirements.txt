@@ -1,0 +1,27 @@
+# PSX·SCORE v5.0 — Python dependencies
+#
+# Install with:  pip install -r requirements.txt
+# (the launcher does this for you on every run)
+
+# --- core: the app will not start without these ---
+flask>=3.0
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+
+# --- used by the analysis pipeline ---
+pandas>=2.0
+pdfplumber>=0.11
+
+# --- exports (Excel / PDF) ---
+openpyxl>=3.1
+reportlab>=4.0
+
+# --- optional, degrade gracefully if missing ---
+# flask-cors : only needed if you open dashboard.html directly off disk
+#              instead of through http://127.0.0.1:5000
+flask-cors>=4.0
+# OCR of scanned "Material Information" letters. Both are optional; without
+# them such filings are honestly reported as UNREAD rather than guessed at.
+pytesseract>=0.3.10
+pypdfium2>=4.0
